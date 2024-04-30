@@ -1,0 +1,21 @@
+[
+    {
+        "title": "Inception",
+        "releaseYear": "2010",
+        "genre": "Science Fiction, Action",
+        "coverUrl": ""
+    },
+    {
+        "title": "The Shawshank Redemption",
+        "releaseYear": "1994",
+        "genre": "Drama, Crime",
+        "coverUrl": ""
+    },
+    {
+        "title": "The Dark Knight",
+        "releaseYear": "2008",
+        "genre": "Action, Crime, Drama",
+        "coverUrl": ""
+    }
+
+]

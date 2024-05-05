@@ -38,10 +38,6 @@
    - Type and select `Python: Select Interpreter`.
    - Choose the Python version you installed earlier.
 
-#### 7. Additional Tools (Optional):
-   - It's helpful to install Git for version control. You can download Git from [Git's official site](https://git-scm.com/downloads).
-   - For managing Python packages, ensure that `pip` is installed (it usually comes with Python). Check by running `pip --version` in the command prompt.
-
 This setup prepares your development environment to start creating the serverless movies API project using Azure and Python in Visual Studio Code on a Windows 10 system. Once you're ready, you can proceed to the next steps of project development, such as creating Azure resources and coding the functions.
 
 
@@ -200,7 +196,7 @@ func new --name GetMovies --template "HTTP trigger" --authlevel anonymous
 This sets up a new function with HTTP trigger and no authorization required for simplicity.
 
 #### 4. Implement the Function:
-rename the function_app.py file to '__init__.py' Edit the `GetMovies/__init__.py` file to include the code that connects to Cosmos DB and fetches movie data. Here is a basic implementation example:
+rename the function_app.py file to `__init__.py` Edit the `GetMovies/__init__.py` file to include the code that connects to Cosmos DB and fetches movie data. Here is a basic implementation example:
 
 ```python
 import azure.functions as func
@@ -260,11 +256,8 @@ Navigate to the root of your Azure Functions project and locate the `local.setti
 - Replace `<YOUR_STORAGE_CONNECTION_STRING>` with the connection string to your Azure Storage account. This is necessary for internal use by Azure Functions.
 - Replace `<YOUR_COSMOS_DB_ENDPOINT>` and `<YOUR_COSMOS_DB_KEY>` with your actual Azure Cosmos DB endpoint URL and key.
 
-The error message `Could not find top-level function app instances in function_app.py` suggests that the Functions runtime is not finding any Azure Functions in the specified Python file.
 
-Based on the verbose output, it seems like the Functions runtime is trying to locate the functions in `function_app.py`. However, the provided `__init__.py` file code looks like it should be within a function folder. Usually, each Azure Function you define would be in its own subfolder with its own `__init__.py`, `function.json`, and any other necessary files.
-
-Here's how a typical Azure Functions Python project structure should look like:
+Here's how the Azure Functions Python project structure should look like:
 
 ```
 Serverless-Movies-API/
@@ -288,12 +281,37 @@ In `GetMovies/__init__.py`, you would have your Python function code as you prov
 ```python
 import azure.functions as func
 import os
+import json
 from azure.cosmos import CosmosClient, exceptions
 
-# ... (rest of your code)
+endpoint = os.environ['COSMOS_ENDPOINT']
+key = os.environ['COSMOS_KEY']
+client = CosmosClient(endpoint, key)
+database_name = 'MoviesDatabase'
+container_name = 'MoviesContainer'
+database = client.get_database_client(database_name)
+container = database.get_container_client(container_name)
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    # Function implementation
+    try:
+        # Query that selects only the necessary attributes
+        query = "SELECT c.title, c.releaseYear, c.genre, c.coverUrl FROM c"
+        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+
+        # Prepare the result to include only the specified fields
+        result = [
+            {"title": item["title"], "releaseYear": item["releaseYear"],
+             "genre": item["genre"], "coverUrl": item["coverUrl"]}
+            for item in items
+        ]
+
+        # Convert the result to JSON string
+        json_result = json.dumps(result, indent=4)  # Pretty print the JSON for readability
+
+        return func.HttpResponse(body=json_result, status_code=200, headers={"Content-Type": "application/json"})
+    except exceptions.CosmosHttpResponseError as e:
+        return func.HttpResponse("Error connecting to Cosmos DB: " + str(e), status_code=500)
+
 ```
 
 And `GetMovies/function.json` would define the trigger and bindings for that function:
@@ -317,7 +335,21 @@ And `GetMovies/function.json` would define the trigger and bindings for that fun
   ]
 }
 ```
+And `local.settings.json` 
 
+```json
+{
+    "IsEncrypted": false,
+    "Values": {
+      "AzureWebJobsStorage": "<your-storage-account-connection-string>",
+      "FUNCTIONS_WORKER_RUNTIME": "python",
+      "COSMOS_ENDPOINT": "<COSMOS_ENDPOINT>",
+      "COSMOS_KEY": "<COSMOS_KEY>",
+      "COSMOS_DATABASE_ID": "<COSMOS_DATABASE_ID>",
+      "COSMOS_CONTAINER_ID": "<COSMOS_CONTAINER_ID>"
+    }
+}
+```
 **Here’s what you should do to resolve the issue:**
 
 1. **Check the Structure**: Ensure your Azure Function app follows the correct project structure, as shown above. Each function should be in its own subdirectory with its `__init__.py` and `function.json`.

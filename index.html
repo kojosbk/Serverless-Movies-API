@@ -3,64 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Change Title</title>
+    <title>Phone Brands</title>
     <style>
-        .color-change {
-            color: black; /* Default color */
-            transition: color 0.5s ease; /* Smooth transition for color change */
-            cursor: pointer; /* Indicates the title is interactive */
-            font-size: 24px; /* Larger font size for visibility */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: transparent;
+        }
+
+        #phoneBrands {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-gap: 10px;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            background: transparent;
+            text-align: center;
+        }
+
+        .brand:hover {
+            transform: scale(1.05);
+        }
+
+        .brand img {
+            width: 80px;
+            height: 40px;
+            object-fit: contain;
+        }
+
+        .brand span {
+            font-size: 0.9em;
+            color: #333;
+            margin-top: 5px;
         }
     </style>
 </head>
 <body>
-    <h1 class="color-change" onmouseover="changeColor(this)" onmouseout="revertColor(this)">
-        <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Change Title</title>
-    <style>
-        .color-change {
-            color: black; /* Default color */
-            transition: color 0.5s ease; /* Smooth transition for color change */
-            cursor: pointer; /* Indicates the title is interactive */
-            font-size: 24px; /* Larger font size for visibility */
-        }
-    </style>
-</head>
-<body>
-    <h1 class="color-change" onmouseover="changeColor(this)" onmouseout="revertColor(this)">
-        Samsung Phones
-    </h1>
+    <div id="phoneBrands">
+        <div class="brand" data-name="Apple" data-url="https://chrisitechnologies.com/apple-products">
+            <img src="https://download.logo.wine/logo/Apple_Store/Apple_Store-Logo.wine.png" alt="Apple">
+            <span>Apple</span>
+        </div>
+        <div class="brand" data-name="Samsung" data-url="https://chrisitechnologies.com/samsung-smartphones">
+            <img src="https://cdn.icon-icons.com/icons2/2845/PNG/512/samsung_logo_icon_181348.png" alt="Samsung">
+            <span>Samsung</span>
+        </div>
+        <div class="brand" data-name="itel" data-url="https://chrisitechnologies.com/itel-devices">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Itel-mobile-logo-vector.svg/1024px-Itel-mobile-logo-vector.svg.png" alt="itel">
+            <span>itel</span>
+        </div>
+        <div class="brand" data-name="Infinix" data-url="https://chrisitechnologies.com/infinix-products">
+            <img src="https://assets.zyrosite.com/YBgyPJ5WEGtLvbvQ/infinix_logo_-_download_free_vector_png-removebg-preview-mv0jP9VZq8TD2vEo.png" alt="Infinix">
+            <span>Infinix</span>
+        </div>
+        <div class="brand" data-name="Tecno" data-url="https://chrisitechnologies.com/tecno-products">
+            <img src="https://assets.zyrosite.com/YBgyPJ5WEGtLvbvQ/tecno-mobile-logo-vector-removebg-preview-Aq2BGzp4pViNzB5p.png" alt="Tecno">
+            <span>Tecno</span>
+        </div>
+    </div>
 
     <script>
-        function changeColor(element) {
-            element.style.color = 'white'; // Changes color to white
-            element.style.backgroundColor = 'black'; // Changes background to black for visibility
-        }
-
-        function revertColor(element) {
-            element.style.color = 'black'; // Reverts color to black
-            element.style.backgroundColor = 'transparent'; // Reverts background to transparent
-        }
-    </script>
-</body>
-</html>
-!
-    </h1>
-
-    <script>
-        function changeColor(element) {
-            element.style.color = 'white'; // Changes color to white
-            element.style.backgroundColor = 'black'; // Changes background to black for visibility
-        }
-
-        function revertColor(element) {
-            element.style.color = 'black'; // Reverts color to black
-            element.style.backgroundColor = 'transparent'; // Reverts background to transparent
-        }
+        document.addEventListener('DOMContentLoaded', function() {
+            var brands = document.querySelectorAll('.brand');
+            brands.forEach(function(brand) {
+                brand.addEventListener('click', function() {
+                    window.open(this.getAttribute('data-url'), '_blank');
+                });
+            });
+        });
     </script>
 </body>
 </html>

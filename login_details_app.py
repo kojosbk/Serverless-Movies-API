@@ -19,7 +19,7 @@ def parse_input(data):
 def generate_message(data):
     manager = capitalize_name(data.get("Hiring Manager Name", ""))
     name = capitalize_name(data.get("Candidate Name", ""))
-    job_title = data.get("candidate Job Title", "")
+    job_title = data.get("Candidate Job Title", "")
     location = data.get("Location", "")
     telephone = data.get("Telephone", "")
 
@@ -44,7 +44,7 @@ def generate_message(data):
         "Gdrive": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\Documents",
         "Mobile Number": telephone,
         "Security Group Membership": "Please copy the group permissions of the person you are to mirror",
-        "Message to Send to Manager": f"Hello {manager},\n\nPlease find the login details for {name} below:\n\nUsername: {username}\nUser Email: {user_email}\nPassword: {password}\n\nBest regards,\nYour IT Team"
+        "Message to Send to Manager": f"Dear {manager},\n\nPlease find the login details for {name} below:\n\nUsername: {username}\nUser Email: {user_email}\nPassword: {password}\n\nBest regards,\nYour IT Team"
     }
 
 def copy_to_clipboard(text, key):

@@ -3,6 +3,9 @@ import streamlit as st
 def capitalize_name(name):
     return " ".join(word.capitalize() for word in name.split())
 
+def get_initials(name):
+    return "".join([word[0].upper() for word in name.split()])
+
 def parse_input(data):
     lines = data.split('\n')
     parsed_data = {}
@@ -27,14 +30,18 @@ def generate_message(data):
     names = name.split()
     first_name = names[0]
     last_name = names[-1]
+    initials = get_initials(name)
     
     username = f"{first_name.lower()}.{last_name.lower()}"
     user_email = f"{username}@inhealthgroup.com"
     password = "Inhealth24"
     
+    internal_note = f"Account created for {name} . Email sent to {manager} via teams regarding account details."
+    
     return {
         "Candidates First Name": first_name,
         "Candidates Last Name": last_name,
+        "Initials": initials,
         "Username": username,
         "Password": password,
         "Candidate's Full Name": name,
@@ -43,7 +50,7 @@ def generate_message(data):
         "Job Title": job_title,
         "Company": "InHealth Group",
         "Manager": manager,
-        "Gdrive": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\Documents",
+        "Gdrive Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\Documents",
         "Mobile": telephone,
         "Address": address,
         "Message to Send Manager": f"""Hello {manager},
@@ -55,7 +62,8 @@ User Email: {user_email}
 Password: {password}
 
 Best regards,
-Your IT Team"""
+Your IT Team""",
+        "Internal Note": internal_note
     }
 
 st.title('Generate User Onboarding Details')
@@ -73,3 +81,4 @@ if "generated_data" in st.session_state:
     for key, value in st.session_state.generated_data.items():
         st.subheader(key)
         st.code(value, language='plaintext')
+

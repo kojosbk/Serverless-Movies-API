@@ -50,7 +50,7 @@ def generate_message(data):
         "Job Title": job_title,
         "Company": "InHealth Group",
         "Manager": manager,
-        "Gdrive Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\Documents",
+        "Gdrive Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\",
         "Mobile": telephone,
         "Address": address,
         "Message to Send Manager": f"""Hello {manager},

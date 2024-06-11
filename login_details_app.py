@@ -32,7 +32,7 @@ def generate_message(data):
     user_email = f"{username}@inhealthgroup.com"
     password = "Inhealth24"
     
-    internal_note = f"The account for {name} was created on M365 and the Active Directory user account was updated with the necessary details. An Message was sent to {manager} with the account details via Teams."
+    internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
     
     return {
         "Candidates First Name": first_name,

@@ -29,10 +29,19 @@ def generate_message(data):
     last_name = names[-1]
     
     username = f"{first_name.lower()}.{last_name.lower()}"
-    user_email = f"{username}@inhealthgroup.com"
-    password = "Inhealth24"
     
-    internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+    # Determine the user email based on Company Registered Number
+    if "Health Intelligence" in data.get("Company Registered Number", ""):
+        user_email = f"{username}@health-intelligence.com"
+        internal_note = f"An account for {name} was created on M365, Blackstar VPN, guest account, Shared mailbox/Distribution Lists and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+    elif "TAC Healthcare" in data.get("Company Registered Number", ""):
+        user_email = f"{username}@tachealthcare.com"
+        internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+    else:
+        user_email = f"{username}@inhealthgroup.com"
+        internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+    
+    password = "Inhealth24"
     
     return {
         "Candidates First Name": first_name,
@@ -45,7 +54,7 @@ def generate_message(data):
         "Job Title": job_title,
         "Company": "InHealth Group",
         "Manager": manager,
-        "Gdrive": f"\\\\IHGD\\Homefolder\\Profiles\\{username}\\Documents",
+        "Gdrive \\Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}",
         "Mobile": telephone,
         "Address": address,
         "Message to Send Manager": f"""Hello {manager},

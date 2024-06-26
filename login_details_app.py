@@ -97,7 +97,7 @@ A message containing the account details was sent to {manager} via Teams."""
         "Job Title": job_title,
         "Company": company_display,
         "Manager": manager,
-        "Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}",
+        "\\Documents": f"\\\\IHGD\\Homefolder\\Profiles\\{username}",
         "Mobile": telephone,
         "Address": address,
         "User Email": user_email,
@@ -155,7 +155,7 @@ if "generated_data" in st.session_state:
             elif section == "Ad Account":
                 keys_to_display = [
                     "Candidates First Name", "Candidates Last Name", "Username", "Password", 
-                    "Candidate's Full Name", "Description", "Office", "Job Title", "Department", 
+                    "Candidate's Full Name", "Description", "Office", "Job Title", "Department", "Company",
                     "Manager", "Documents", "User Email"
                 ]
             elif section == "Mail Distribution":

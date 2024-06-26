@@ -145,7 +145,7 @@ if "generated_data" in st.session_state:
             elif section == "Office 365 Account":
                 keys_to_display = [
                     "Candidates First Name", "Candidates Last Name", "Username", "Password", 
-                    "Candidate's Full Name", "Description", "Office", "Job Title", "Company", 
+                    "Candidate's Full Name", "Description", "Office", "Job Title", "Company", "Department",
                     "Manager", "Mobile", "Address", "User Email"
                 ]
             elif section == "InHealth Guest Account":

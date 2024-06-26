@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 
 def capitalize_name(name):
     return " ".join(word.capitalize() for word in name.split())
@@ -31,6 +32,10 @@ def generate_message(data):
     
     username = f"{first_name.lower()}.{last_name.lower()}"
     
+    # Retrieve passwords from environment variables
+    default_password = os.getenv("DEFAULT_PASSWORD", "default_password_here")
+    spectra_pm_password = os.getenv("SPECTRA_PM_PASSWORD", "spectra_pm_password_here")
+
     # Determine the user email based on Company Registered Number
     if "Health Intelligence" in data.get("Company Registered Number", ""):
         user_email = f"{username}@health-intelligence.com"
@@ -67,13 +72,11 @@ def generate_message(data):
             "Ad Account"
         ]
     
-    password = "Inhealth24"
-    
     return {
         "Candidates First Name": first_name,
         "Candidates Last Name": last_name,
         "Username": username,
-        "Password": password,
+        "Password": default_password,
         "Candidate's Full Name": name,
         "Description": job_title,
         "Office": location,
@@ -86,7 +89,7 @@ def generate_message(data):
         "User Email": user_email,
         "Department": company_name,
         "Spectra PM Username": f"{first_name.lower()}{last_name[0].lower()}super",
-        "Spectra PM Password": "Blue1377",
+        "Spectra PM Password": spectra_pm_password,
         "NHS Email": "nomail@nhs.net",
         "Message to Send Manager": f"""Hello {manager},
 
@@ -94,7 +97,7 @@ Please find the login details for {name} below:
 
 Username: {username}
 User Email: {user_email}
-Password: {password}
+Password: {default_password}
 
 Best regards,
 Your IT Team""",

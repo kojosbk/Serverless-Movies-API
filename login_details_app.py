@@ -173,7 +173,7 @@ if "generated_data" in st.session_state:
             
             for key in keys_to_display:
                 if key in st.session_state.generated_data:
-                    st.markdown(f"**{key}:**")
+                    st.markdown(f"**{key} :**")
                     st.code(st.session_state.generated_data[key], language='plaintext')
 
     # Display Internal Note, Manager, and Message to Send Manager

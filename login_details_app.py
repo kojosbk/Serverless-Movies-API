@@ -164,7 +164,7 @@ if "generated_data" in st.session_state:
                 ]
             elif section == "Spectra PM":
                 keys_to_display = [
-                    "Spectra PM Username", "Spectra PM Password", "NHS Email"
+                    "Candidates First Name", "Candidates Last Name","Spectra PM Username", "Spectra PM Password", "NHS Email"
                 ]
             elif section == "8x8 VCC Account":
                 keys_to_display = [

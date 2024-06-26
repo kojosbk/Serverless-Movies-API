@@ -31,10 +31,21 @@ def generate_message(data):
     
     username = f"{first_name.lower()}.{last_name.lower()}"
     
+    # Retrieve passwords from Streamlit secrets
+    default_password = st.secrets["DEFAULT_PASSWORD"]
+    spectra_pm_password = st.secrets["SPECTRA_PM_PASSWORD"]
+
     # Determine the user email based on Company Registered Number
     if "Health Intelligence" in data.get("Company Registered Number", ""):
         user_email = f"{username}@health-intelligence.com"
-        internal_note = f"An account for {name} was created on M365, Blackstar VPN, guest account, Shared mailbox/Distribution Lists and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+        internal_note = f"""An account for {name} was created on the following platforms:
+- M365
+- Blackstar VPN
+- Guest account
+- Shared mailbox/Distribution Lists
+- Active Directory user account updated with necessary details
+
+A message containing the account details was sent to {manager} via Teams."""
         company_display = "Health Intelligence"
         sections = [
             "VPN Account", 
@@ -48,7 +59,11 @@ def generate_message(data):
     elif "TAC Healthcare" in data.get("Company Registered Number", ""):
         user_email = f"{username}@tachealthcare.com"
         company_display = "TAC Healthcare"
-        internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+        internal_note = f"""An account for {name} was created on the following platforms:
+- M365
+- Active Directory user account updated with necessary details
+
+A message containing the account details was sent to {manager} via Teams."""
         sections = [
             "VPN Account", 
             "Office 365 Account", 
@@ -61,19 +76,21 @@ def generate_message(data):
     else:
         user_email = f"{username}@inhealthgroup.com"
         company_display = "InHealth Group"
-        internal_note = f"An account for {name} was created on M365, and the Active Directory user account was updated with the necessary details. A message containing the account details was sent to {manager} via Teams."
+        internal_note = f"""An account for {name} was created on the following platforms:
+- M365
+- Active Directory user account updated with necessary details
+
+A message containing the account details was sent to {manager} via Teams."""
         sections = [
             "Office 365 Account", 
             "Ad Account"
         ]
     
-    password = "Inhealth24"
-    
     return {
         "Candidates First Name": first_name,
         "Candidates Last Name": last_name,
         "Username": username,
-        "Password": password,
+        "Password": default_password,
         "Candidate's Full Name": name,
         "Description": job_title,
         "Office": location,
@@ -86,15 +103,15 @@ def generate_message(data):
         "User Email": user_email,
         "Department": company_name,
         "Spectra PM Username": f"{first_name.lower()}{last_name[0].lower()}super",
-        "Spectra PM Password": "Blue1377",
+        "Spectra PM Password": spectra_pm_password,
         "NHS Email": "nomail@nhs.net",
         "Message to Send Manager": f"""Hello {manager},
 
-Please find the login details for {name} below:
+Please find the login details for the new starter, {name}, who will be joining as a {job_title}.
 
 Username: {username}
 User Email: {user_email}
-Password: {password}
+Password: {default_password}
 
 Best regards,
 Your IT Team""",
@@ -159,9 +176,12 @@ if "generated_data" in st.session_state:
                     st.markdown(f"**{key}:**")
                     st.code(st.session_state.generated_data[key], language='plaintext')
 
-    # Display Internal Note and Message to Send Manager outside the sections
+    # Display Internal Note, Manager, and Message to Send Manager
     st.markdown("### Internal Note")
     st.code(st.session_state.generated_data["Internal Note"], language='plaintext')
+    
+    st.markdown("### Manager")
+    st.code(st.session_state.generated_data["Manager"], language='plaintext')
     
     st.markdown("### Message to Send Manager")
     st.code(st.session_state.generated_data["Message to Send Manager"], language='plaintext')

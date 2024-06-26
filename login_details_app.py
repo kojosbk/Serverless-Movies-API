@@ -156,7 +156,7 @@ if "generated_data" in st.session_state:
                 keys_to_display = [
                     "Candidates First Name", "Candidates Last Name", "Username", "Password", 
                     "Candidate's Full Name", "Description", "Office", "Job Title", "Department", "Company",
-                    "Manager", "Documents", "User Email"
+                    "Manager", "\\Documents", "User Email"
                 ]
             elif section == "Mail Distribution":
                 keys_to_display = [

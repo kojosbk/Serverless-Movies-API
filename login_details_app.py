@@ -150,7 +150,7 @@ if "generated_data" in st.session_state:
                 ]
             elif section == "InHealth Guest Account":
                 keys_to_display = [
-                    "Candidate's Full Name", "User Email"
+                    "User Email", "Candidate's Full Name"
                 ]
             elif section == "Ad Account":
                 keys_to_display = [

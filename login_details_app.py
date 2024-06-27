@@ -65,13 +65,8 @@ A message containing the account details was sent to {manager} via Teams."""
 
 A message containing the account details was sent to {manager} via Teams."""
         sections = [
-            "VPN Account", 
             "Office 365 Account", 
-            "InHealth Guest Account", 
-            "Ad Account", 
-            "Mail Distribution", 
-            "Spectra PM", 
-            "8x8 VCC Account"
+            "Ad Account",    
         ]
     else:
         user_email = f"{username}@inhealthgroup.com"

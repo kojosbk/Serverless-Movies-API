@@ -77,7 +77,7 @@ A message containing the account details was sent to {manager} via Teams."""
         user_email = f"{username}@inhealthgroup.com"
         company_display = "InHealth Group"
         internal_note = f"""An account for {name} was created on the following platforms:
-- M365
+- Exchange admin center
 - Active Directory user account updated with necessary details
 
 A message containing the account details was sent to {manager} via Teams."""

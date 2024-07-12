@@ -201,7 +201,7 @@ if "generated_data" in st.session_state:
                 user_email = st.session_state.generated_data.get("User Email", "")
                 if "@inhealthgroup.com" in user_email or "@tachealthcare.com" in user_email:
                     keys_to_display = [
-                        "Candidates First Name", "Candidates Last Name", "Username", "Password", "Candidate's Full Name"
+                        "Candidates First Name", "Candidates Last Name", "Username","Job Title", "Password", "Candidate's Full Name"
                     ]
                 else:
                     keys_to_display = [

@@ -108,7 +108,7 @@ def generate_message(issue):
         st.write(f"{description}")
         
         st.subheader("Internal Note")
-        st.write("The XRM account password has been successfully reset, and the issue has been resolved.")
+        st.code("The XRM account password has been successfully reset, and the issue has been resolved.")
 
 # Generate message when a button is clicked
 col1, col2, col3 = st.columns(3)

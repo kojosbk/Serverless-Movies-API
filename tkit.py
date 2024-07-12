@@ -6,6 +6,9 @@ st.set_page_config(page_title="Support Request App", layout="centered")
 
 # User input for name
 user_name = st.text_input("Enter your name:")
+number = st.text_input("Enter your contact number:")
+location = st.text_input("Enter your location:")
+trailer_number = st.text_input("Enter the trailer number:")
 
 # List of predefined messages for "Fix an account problem"
 account_problem_messages = [
@@ -124,4 +127,7 @@ with col3:
 if st.button("Submit"):
     st.toast("Your request has been submitted.", icon="🎉")
 
-
+# Display experimental dialog for more user interactions
+if st.button("Need Help?"):
+    with st.experimental_dialog("Support Dialog"):
+        st.write("You can contact our support team at support@example.com or call 1-800-123-4567 for further assistance.")

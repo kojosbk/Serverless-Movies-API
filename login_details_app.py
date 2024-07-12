@@ -98,7 +98,7 @@ def generate_message(data):
         sections.append("Permissions")
         internal_note += f"\n- {' and '.join(permissions)} permissions added"
 
-    internal_note += f"\n\nA message containing the account details has been sent to {manager.split()[0]} via Teams."
+    internal_note += f"\n\nA message containing the account details has been sent to {manager} via Teams."
 
     groups = {
         "Patient Care Advisor": [

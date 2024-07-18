@@ -98,7 +98,7 @@ def generate_message(data):
         sections.append("Permissions")
         internal_note += f"\n- {' and '.join(permissions)} permissions added"
 
-    internal_note += f"\n\nA message containing the account details has been sent to {manager} via Teams."
+    internal_note += f"\n\nA message containing the account details has been sent to {manager.split()[0]} via Teams."
 
     groups = {
         "Patient Care Advisor": [
@@ -134,6 +134,13 @@ def generate_message(data):
         "Administrator and Health Care Assistant": [
             "SEC_G_Sentinel_SSO", "SEC_G_License_E3", "Domain Users", "SEC_G_AOVPN_Users", "Sec_G_Clinical_Reviewer",
             "SEC_G_OPERATIONS_UOMRI_FOLDER_SECURITY_RW_IHGD", "SEC_G_Egress_POC", "DL_All_eReq_Users", "SEC_G_UPRIGHT_BIRMINGHAM_RW"
+        ],
+        "Clinical Assistant": [
+            "SEC_G_Sentinel_SSO", "SEC_G_License_E3", "SEC_G_MAYDAY_RW", "Domain Users", "SEC_G_AOVPN_Users", "Sec_G_InTune_BYOD_Compliant",
+            "SEC_G_All_Clinical_Staff", "Sec_G_InTune_MDM_MTD_Compliant", "Sec_G_Clinical_Enhanced", "SEC_G_folder_redirection_IHGD-PS-VP-001"
+        ],
+        "Bank Offshore Medic": [
+            "Domain Users", "SEC_G_AOVPN_Users", "SEC_G_License_EOL_Plan2"
         ]
     }
 
@@ -173,6 +180,9 @@ Username: {username}
 User Email: {user_email}
 Password: {default_password}
 
+Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
+Spectra PM Password: {spectra_pm_password}
+
 Best regards,
 Your IT Team""",
         "Internal Note": internal_note,
@@ -201,7 +211,7 @@ if "generated_data" in st.session_state:
                 user_email = st.session_state.generated_data.get("User Email", "")
                 if "@inhealthgroup.com" in user_email or "@tachealthcare.com" in user_email:
                     keys_to_display = [
-                        "Candidates First Name", "Candidates Last Name", "Username","Job Title", "Password", "Candidate's Full Name"
+                        "Candidates First Name", "Candidates Last Name", "Username", "Password", "Candidate's Full Name"
                     ]
                 else:
                     keys_to_display = [

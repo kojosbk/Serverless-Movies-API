@@ -311,14 +311,14 @@ if "generated_data" in st.session_state:
                         st.code(st.session_state.generated_data[key], language='plaintext')
 
     # Display Internal Note, Manager, Message to Send Manager, and Jira Reply
-    st.markdown("### Internal Note")
-    st.code(st.session_state.generated_data["Internal Note"], language='plaintext')
-    
     st.markdown("### Manager")
     st.code(st.session_state.generated_data["Manager"], language='plaintext')
-    
+
     st.markdown("### Message to Send Manager")
     st.code(st.session_state.generated_data["Message to Send Manager"], language='plaintext')
 
     st.markdown("### Jira Reply")
     st.code(st.session_state.generated_data["Jira Reply"], language='plaintext')
+
+    st.markdown("### Internal Note")
+    st.code(st.session_state.generated_data["Internal Note"], language='plaintext')

@@ -18,13 +18,10 @@ def parse_input(data):
     
     return parsed_data
 
-def generate_password(length=12):
-    alphabet = string.ascii_letters + string.digits
-    password = ''.join(secrets.choice(alphabet) for _ in range(length // 2))
-    password += ''.join(secrets.choice(string.digits) for _ in range(length // 2))
-    password_list = list(password)
-    secrets.SystemRandom().shuffle(password_list)
-    return ''.join(password_list)
+def generate_password_from_name(first_name, last_name):
+    first_part = first_name.lower()[:3]
+    last_part = last_name.lower()[:3]
+    return generate_password_from_env()
 
 def generate_message(data):
     manager = capitalize_name(data.get("Hiring Manager Name", ""))
@@ -42,9 +39,9 @@ def generate_message(data):
     
     username = f"{first_name.lower()}.{last_name.lower()}"
     
-    # Generate random passwords
-    default_password = generate_password()
-    spectra_pm_password = generate_password()
+    # Generate passwords using the first 3 letters of first and last name plus #24
+    default_password = generate_password_from_name(first_name, last_name)
+    spectra_pm_password = generate_password_from_name(first_name, last_name)
 
     permissions = []
     if data.get("Access Permissions for XRM", "").lower() != "no" and data.get("Access Permissions for XRM", "").strip():
@@ -149,7 +146,42 @@ def generate_message(data):
         sections.append("Groups")
 
     # Determine if we need to use "a" or "an"
-    article = "an" if job_title[0].lower() in 'aeiou' else "a"
+    article = "an" if job_title and job_title[0].lower() in 'aeiou' else "a"
+
+    # Generate the message to send to the manager
+    if "@inhealthgroup.com" in user_email:
+        message_to_send_manager = f"""Hello {manager.split()[0]},
+
+Please find the login details for the new starter, {name}, who will be joining as {article} {job_title} on {start_date}.
+
+Username: {username}
+User Email: {user_email}
+Password: {default_password}
+
+Best regards,
+Your IT Team"""
+    else:
+        message_to_send_manager = f"""Hello {manager.split()[0]},
+
+Please find the login details for the new starter, {name}, who will be joining as {article} {job_title} on {start_date}.
+
+Username: {username}
+User Email: {user_email}
+Password: {default_password}
+
+Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
+Spectra PM Password: {spectra_pm_password}
+
+Best regards,
+Your IT Team"""
+
+    # Generate the Jira Reply message
+    jira_reply = f"""Hello {manager.split()[0]},
+
+An account for {name} has been created, and the account details have been sent to you via Teams.
+
+Best regards,
+Your IT Team"""
 
     return {
         "Candidates First Name": first_name,
@@ -172,20 +204,9 @@ def generate_message(data):
         "NHS Email": "nomail@nhs.net",
         "Permissions": ", ".join(permissions),
         "Groups": "\n".join(group_list),
-        "Message to Send Manager": f"""Hello {manager.split()[0]},
-
-Please find the login details for the new starter, {name}, who will be joining as {article} {job_title} on {start_date}.
-
-Username: {username}
-User Email: {user_email}
-Password: {default_password}
-
-Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
-Spectra PM Password: {spectra_pm_password}
-
-Best regards,
-Your IT Team""",
+        "Message to Send Manager": message_to_send_manager,
         "Internal Note": internal_note,
+        "Jira Reply": jira_reply,
         "Sections": sections
     }
 
@@ -211,7 +232,7 @@ if "generated_data" in st.session_state:
                 user_email = st.session_state.generated_data.get("User Email", "")
                 if "@inhealthgroup.com" in user_email or "@tachealthcare.com" in user_email:
                     keys_to_display = [
-                        "Candidates First Name", "Candidates Last Name", "Username", "Password", "Candidate's Full Name"
+                        "Candidates First Name", "Candidates Last Name", "Username", "Password", "Candidate's Full Name", "Job Title"
                     ]
                 else:
                     keys_to_display = [
@@ -289,7 +310,7 @@ if "generated_data" in st.session_state:
                         st.markdown(f"**{key} :**")
                         st.code(st.session_state.generated_data[key], language='plaintext')
 
-    # Display Internal Note, Manager, and Message to Send Manager
+    # Display Internal Note, Manager, Message to Send Manager, and Jira Reply
     st.markdown("### Internal Note")
     st.code(st.session_state.generated_data["Internal Note"], language='plaintext')
     
@@ -298,3 +319,6 @@ if "generated_data" in st.session_state:
     
     st.markdown("### Message to Send Manager")
     st.code(st.session_state.generated_data["Message to Send Manager"], language='plaintext')
+
+    st.markdown("### Jira Reply")
+    st.code(st.session_state.generated_data["Jira Reply"], language='plaintext')

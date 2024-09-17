@@ -128,6 +128,46 @@ spectra_internal_messages = [
     "The account was unfrozen and the user was given the new password via Teams and phone."
 ]
 
+# Reply message bodies for each issue type
+password_reset_user_messages = [
+    "Your Windows account password has been reset. Please use the new password provided over the phone to log in.",
+    "We have successfully reset your Windows password. Use the new credentials to access your account.",
+    "Your password has been changed as requested. Please log in with the new password we provided.",
+    "Password reset completed. You can now log in to your account using the new password.",
+    "Your account password has been reset. Please use the new password communicated to you.",
+    "We've reset your password. Please check your phone for the new credentials.",
+    "The password for your Windows account has been reset. Use the new password to log in.",
+    "Your password reset is complete. Log in with the new password provided.",
+    "We've updated your password as per your request. Please use the new password to access your account.",
+    "Your password has been successfully reset. You can now log in with the new credentials."
+]
+
+xrm_user_messages = [
+    "Your XRM account password has been reset. Please use the new password provided via Teams or phone.",
+    "We have reset your XRM account password. Use the new credentials to log in.",
+    "Your XRM password has been changed. Please log in with the new password we've shared.",
+    "Password reset for your XRM account is complete. You can now access your account.",
+    "Your XRM account has been reset. Use the new password provided to you.",
+    "We've successfully reset your XRM password. Please check Teams or your phone for the new password.",
+    "Your XRM account password has been updated. Log in using the new credentials.",
+    "Password reset completed for XRM. Use the new password to log in.",
+    "Your XRM account is now accessible. Please use the new password we've sent you.",
+    "We've reset your XRM password as requested. You can now log in with the new password."
+]
+
+spectra_user_messages = [
+    "Your Spectra account has been unfrozen and reset. Please use the new password to log in.",
+    "We have unfrozen your Spectra account. Use the new credentials provided to access your account.",
+    "Your Spectra account is now active. Please log in with the new password we've shared.",
+    "Account unfrozen and password reset. You can now access your Spectra account.",
+    "Your Spectra account has been restored. Use the new password to log in.",
+    "We've unfrozen your Spectra account and reset your password. Please use the new credentials.",
+    "Your Spectra account is accessible again. Log in with the new password provided.",
+    "Spectra account unfrozen. Please use the new password to access your account.",
+    "Your account has been unfrozen and reset. You can now log in to Spectra.",
+    "We've reactivated your Spectra account. Please log in using the new password."
+]
+
 # Known issue types
 issue_types = ['ad', 'xrm', 'spectra']
 
@@ -197,27 +237,34 @@ def parse_input(input_data):
 def generate_message(data):
     issue_type = data["issue"]
 
-    # Select summary, description, and internal message based on issue type
+    # Select summary, description, internal message, and user reply based on issue type
     if issue_type == "ad":
         summary = random.choice(password_reset_summaries)
         description = random.choice(password_reset_descriptions)
         internal_message = random.choice(password_reset_internal_messages)
+        user_message_body = random.choice(password_reset_user_messages)
         app_name = "Active Directory"
     elif issue_type == "xrm":
         summary = random.choice(xrm_account_summaries)
         description = random.choice(xrm_descriptions)
         internal_message = random.choice(xrm_internal_messages)
+        user_message_body = random.choice(xrm_user_messages)
         app_name = "XRM"
     elif issue_type == "spectra":
         summary = random.choice(spectra_account_summaries)
         description = random.choice(spectra_descriptions)
         internal_message = random.choice(spectra_internal_messages)
+        user_message_body = random.choice(spectra_user_messages)
         app_name = "Spectra"
     else:
         summary = "Issue Summary"
         description = "No specific description available for this issue type."
         internal_message = "No internal message available for this issue type."
+        user_message_body = "Your issue has been resolved."
         app_name = data["issue"]
+
+    # Construct the reply message
+    user_reply = f"Hello {data['name']},\n\n{user_message_body}\n\nBest regards,\nSupport Team"
 
     # Display the generated request in the specified format
     st.subheader("Raise this request on behalf of")
@@ -249,6 +296,10 @@ def generate_message(data):
     # Internal Message
     st.subheader("Internal Message")
     st.code(internal_message, language='text')
+
+    # Reply on Jira
+    st.subheader("Reply on Jira")
+    st.code(user_reply, language='text')
 
 # Parse the input and generate message when a button is clicked
 if st.button("Generate Request"):

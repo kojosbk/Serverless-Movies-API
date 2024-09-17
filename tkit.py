@@ -1,111 +1,248 @@
 import streamlit as st
 import random
+import re
 
 # Set page config
 st.set_page_config(page_title="Support Request App", layout="centered")
 
-# User inputs
-user_name = st.text_input("Enter your name:")
-number = st.text_input("Enter your contact number:")
-location = st.text_input("Enter your location:")
-trailer_number = st.text_input("Enter the trailer number:")
+# Input box for single data entry
+input_data = st.text_area("Enter the request details (Name, Issue, Transaction ID, Phone#, Asset Tag - optional):")
 
-# Predefined messages
-messages = {
-    "Fix an account problem": [
-        "I am experiencing difficulties logging into my Windows account. Despite multiple attempts, I am unable to access my account. Each time I try to log in, I encounter an error message or the login screen does not accept my credentials. This issue has been persistent and is preventing me from accessing my files and applications. I have checked my internet connection and confirmed that my password is correct. However, the problem still persists. Could you please assist me in resolving this login issue?",
-        "I am having trouble logging into my Windows account. I have tried multiple times, but I keep getting an error message or my credentials are not accepted. I have confirmed that my internet connection and password are correct. Can you help me resolve this issue?",
-        "I'm unable to log into my Windows account. Each attempt results in an error or rejection of my credentials. I've verified my internet connection and password. Please assist me with this problem.",
-        "I can't log into my Windows account. My credentials are not accepted, and I get an error message each time. I've checked my internet and password. Could you help?",
-        "I am having login issues with my Windows account. My credentials aren't being accepted. I’ve verified my internet and password. Please help.",
-        "Trouble logging into my Windows account. Credentials not accepted despite correct internet and password. Need help.",
-        "Can't log into Windows. Credentials rejected. Internet and password are correct. Help needed.",
-        "Unable to log into Windows. Credentials fail. Checked internet and password. Assistance required.",
-        "Logging issue with Windows. Correct credentials not working. Need assistance.",
-        "Windows login problem. Credentials fail. Please help.",
-        "Windows login issue. Credentials not accepted. Help needed.",
-        "Windows login trouble. Need help.",
-        "Can't log into Windows. Help.",
-        "Windows login fail. Assistance?",
-        "Login issue. Help!"
-    ],
-    "Trailer static issue": [
-        "There is no internet connection available on the trailer. Despite multiple attempts to troubleshoot, I am unable to establish a connection. The router appears to be functioning, but the devices cannot access the internet. I have checked the cables and rebooted the system several times without success. This issue is affecting our ability to work and communicate effectively. Could you please provide assistance in resolving this connectivity problem?",
-        "There is no internet connection on the trailer. I have tried troubleshooting but can't establish a connection. The router seems fine, but devices can't access the internet. I have checked cables and rebooted multiple times. Could you assist with this issue?",
-        "No internet on the trailer. I've tried troubleshooting, but nothing works. Router appears fine, but devices can't connect. Checked cables and rebooted. Need help.",
-        "No internet in the trailer. Troubleshooting failed. Router seems okay, but devices can't connect. Checked everything. Please help.",
-        "Trailer has no internet. Router works, devices don't connect. Tried troubleshooting. Need help.",
-        "No internet on trailer. Router seems fine, but no connection. Tried everything. Help needed.",
-        "Internet down in trailer. Router okay, no device connection. Troubleshooting failed. Need assistance.",
-        "No internet connection in trailer. Router fine, devices not connecting. Tried fixing. Need help.",
-        "Trailer internet issue. Router works, no device connection. Need help.",
-        "No internet on trailer. Router fine, devices not connecting. Help needed.",
-        "No internet in trailer. Devices can't connect. Help.",
-        "Trailer internet down. Need help.",
-        "No internet on trailer. Help.",
-        "Trailer internet issue. Assist?",
-        "Internet out. Help!"
-    ],
-    "XRM Account Reset": [
-        "I am unable to access my XRM account despite entering the correct credentials. Please reset my account to resolve the issue.",
-        "My XRM account credentials are not working. I have tried resetting my password, but the problem persists. Please assist.",
-        "I have been locked out of my XRM account. Each attempt to log in fails, even with the correct username and password. I need a reset.",
-        "Despite multiple attempts, I cannot log into my XRM account. The credentials are being rejected. Please reset my account.",
-        "I am facing issues accessing my XRM account. The login page does not accept my credentials. A reset is required.",
-        "My XRM account is inaccessible. I have verified my credentials and internet connection, but still can't log in. Please help with a reset.",
-        "I've tried to log into my XRM account several times without success. My credentials seem to be invalid. Please reset my account.",
-        "I cannot access my XRM account. Even after password reset attempts, the issue persists. Assistance needed for account reset.",
-        "My XRM account login fails every time. I have checked my credentials, but still can't get in. A reset is required.",
-        "The XRM account login page is not accepting my credentials. I need a reset to resolve the issue.",
-        "Unable to log into my XRM account. The credentials are correct but still not working. Please reset my account.",
-        "I am facing login issues with my XRM account. Despite correct credentials, access is denied. Need an account reset.",
-        "I cannot access my XRM account. Login attempts fail even with correct credentials. A reset is needed.",
-        "My XRM account is not accepting my password. After several tries, I still can't log in. Please reset my account.",
-        "Having trouble accessing my XRM account. The credentials are being rejected. Please help by resetting my account."
-    ]
-}
-
-# Summaries for XRM Account Reset
-xrm_account_summaries = [
-    "XRM Account Reset Required",
-    "Need Assistance with XRM Account Reset",
-    "Request for XRM Account Reset",
-    "XRM Account Login Issue",
-    "XRM Account Reset Needed"
+# Predefined random summaries for specific issues
+password_reset_summaries = [
+    "Request for Password Reset",
+    "Password Change Required",
+    "Can't Log into My Account - Need Password Reset",
+    "Need Assistance with Password Change",
+    "Help Needed for Account Access - Password Issue",
+    "Password Reset Request",
+    "Unable to Access Account - Password Problem",
+    "Password Reset Required",
+    "Can't Login - Need Help with Password",
+    "Password Change Request"
 ]
 
-# Function to generate messages based on the selected issue
-def generate_message(issue):
-    st.subheader("Summary")
-    if issue == "XRM Account Reset":
-        st.text(random.choice(xrm_account_summaries))
-    else:
-        st.text("Account Reset Required" if issue == "Fix an account problem" else "Trailer is experiencing static issues.")
-    
-    st.subheader("Description")
-    st.code(random.choice(messages[issue]))
-    
-    st.subheader("Internal Note")
-    note = {
-        "Fix an account problem": "The account has been successfully reset in Active Directory, and the issue has been resolved.",
-        "Trailer static issue": "Provided instructions to the user to flush the DNS using 'ipconfig /flushdns' and 'ipconfig /release'. The user has confirmed that the issue has been resolved.",
-        "XRM Account Reset": "The XRM account password has been successfully reset, and the issue has been resolved."
+xrm_account_summaries = [
+    "Need Assistance with XRM Account Reset",
+    "XRM Account Reset Required",
+    "Request for XRM Account Reset",
+    "XRM Account Login Issue",
+    "XRM Account Reset Needed",
+    "XRM Account Inaccessible - Requesting Help",
+    "Problem with XRM Login - Requesting Assistance",
+    "Locked Out of XRM Account - Need Reset",
+    "Need XRM Account Password Change",
+    "Help Needed to Access XRM Account"
+]
+
+spectra_account_summaries = [
+    "Spectra Account Frozen - Assistance Needed",
+    "Request to Unfreeze Spectra Account",
+    "Spectra Account Inactive - Need Help",
+    "Help Needed to Restore Spectra Account",
+    "Issue with Frozen Spectra Account",
+    "Spectra Account Locked - Requesting Support",
+    "Urgent Request to Unfreeze Spectra Account",
+    "Can't Access Frozen Spectra Account - Need Help",
+    "Request to Unlock Frozen Spectra Account",
+    "Spectra Account Inaccessible - Assistance Required"
+]
+
+# Corrected descriptions list for different issues
+xrm_descriptions = [
+    "I have been locked out of my XRM account despite multiple attempts to log in. Please assist in resetting my account.",
+    "XRM account reset is needed urgently. I cannot log in.",
+    "My XRM account is inaccessible, and I need help resetting it.",
+    "I forgot my XRM password. Please reset it for me.",
+    "I am unable to log in to my XRM account. Kindly assist with a password reset.",
+    "I've tried to log in to XRM several times, and it keeps failing. Please help me reset the password.",
+    "Locked out of my XRM account after multiple failed attempts. Please help me reset the password.",
+    "I cannot access my XRM account after a password issue. Assistance is required for resetting it.",
+    "My XRM account login keeps failing. I need a password reset.",
+    "XRM account access is blocked after several wrong password attempts. Help is needed."
+]
+
+password_reset_descriptions = [
+    "I am unable to access my account and need help resetting my password.",
+    "I forgot my password and can't log into my account. Please reset it.",
+    "Account is locked due to failed login attempts. Assistance needed to reset the password.",
+    "I'm unable to log in and require a password reset.",
+    "My account won't accept my password, and I need help resetting it.",
+    "The password for my account needs to be reset as I'm unable to log in.",
+    "I cannot access my account after a password issue. Assistance required for a password reset.",
+    "I've forgotten my account password and need help resetting it.",
+    "Account is inaccessible due to a forgotten password. Please reset it.",
+    "I am locked out of my account and require a password reset."
+]
+
+spectra_descriptions = [
+    "My Spectra account has been frozen and I need help unfreezing it as soon as possible.",
+    "I am unable to access my Spectra account because it has been frozen. Please assist in unfreezing it.",
+    "My Spectra account is currently frozen and I require help restoring access.",
+    "I need immediate assistance to unfreeze my Spectra account, which has been locked.",
+    "My Spectra account is inaccessible due to it being frozen. Please help me resolve this.",
+    "My account on Spectra has been frozen and I cannot use the service. Assistance is needed to unfreeze it.",
+    "I have been locked out of my Spectra account due to freezing. Help is needed to restore access.",
+    "My Spectra account has been frozen and I cannot proceed with my work. Please help me unlock it.",
+    "The Spectra account I am using is currently frozen, and I need support to fix this issue.",
+    "I cannot log in to my Spectra account as it has been frozen. Please assist me in unfreezing it."
+]
+
+# Internal messages
+xrm_internal_messages = [
+    "Password has been unlocked and reset. User has been given the new password via Teams and over the phone.",
+    "The XRM account password was reset, and the user was informed of the new password through Teams and phone.",
+    "The user’s password was reset and provided through Teams and phone communication.",
+    "XRM account reset successfully. The new password has been shared with the user over the phone and via Teams.",
+    "Password reset completed. The user has received the new password both on Teams and via phone.",
+    "The user’s password was reset, and they were notified via Teams and phone.",
+    "Password was unlocked and reset. The new password was sent to the user through Teams and phone.",
+    "Password reset was successful, and the user was given the new credentials over the phone and Teams.",
+    "The XRM account password was reset, and the user was informed of the new password over the phone and through Teams.",
+    "The account was reset, and the new password was communicated to the user on Teams and phone."
+]
+
+spectra_internal_messages = [
+    "Account has been unfrozen and a new password has been set and sent to the user via Teams and on the phone.",
+    "The Spectra account has been unfrozen and the new password was provided to the user via Teams and phone.",
+    "The account was unfrozen and the new password was shared with the user on Teams and by phone.",
+    "Spectra account unlocked and password updated. The user has been informed via phone and Teams.",
+    "The frozen account has been unfrozen and a new password was sent to the user through Teams and phone.",
+    "Account reset and unfrozen. The user has received their new password via Teams and phone.",
+    "The Spectra account has been unfrozen and the password reset. The user was informed over Teams and phone.",
+    "Account has been unlocked and reset. The new password was given to the user via Teams and phone.",
+    "Spectra account unfrozen and new password created. The user was notified over the phone and Teams.",
+    "The account was unfrozen and the user was given the new password via Teams and phone."
+]
+
+password_reset_internal_messages = [
+    "The Active Directory account password has been successfully reset, and the issue has been resolved. The new password was provided to the user over the phone.",
+    "Password reset for Active Directory was successful. The new password was given to the user over the phone.",
+    "The password was reset for the user's Active Directory account, and the new password was provided over the phone.",
+    "Active Directory password was reset, and the user was informed of the new password over the phone.",
+    "The password reset for Active Directory resolved the issue. The user received the new password via phone.",
+    "Password reset on Active Directory has been completed, and the user was given the new password by phone.",
+    "The user’s Active Directory password has been reset, and the new password was communicated over the phone.",
+    "Password reset was successful. The user was given their new Active Directory password via phone.",
+    "The Active Directory password reset has resolved the issue. The new password was provided to the user over the phone.",
+    "The password was reset and shared with the user over the phone, successfully resolving the Active Directory issue."
+]
+
+# Known issue types
+issue_types = ['ad', 'xrm', 'spectra']
+
+# Function to parse the input data
+def parse_input(input_data):
+    lines = input_data.strip().split("\n")
+    data = {
+        "name": None,
+        "issue": None,
+        "transaction_id": None,
+        "phone_number": None,
+        "asset_tag": None
     }
-    st.text(note[issue])
 
-# Generate message when a button is clicked
-col1, col2, col3 = st.columns(3)
+    for line in lines:
+        line = line.strip()
+        # Check for issue type
+        if line.lower() in issue_types:
+            data["issue"] = line.lower()
+        # Check for transaction ID (assuming it's a 6-digit number)
+        elif re.match(r'^\d{6}$', line):
+            data["transaction_id"] = line
+        # Check for phone number (assuming it starts with + or country code and is 10+ digits)
+        elif re.match(r'^(\+?\d{10,15})$', line):
+            data["phone_number"] = line
+        # Check for asset tag formats
+        elif re.match(r'^\d{5}$', line):  # 5-digit asset tag
+            data["asset_tag"] = line
+        elif re.match(r'^(LT|DT)-[A-Za-z0-9]+$', line):  # LT- or DT- followed by alphanumerics
+            data["asset_tag"] = line
+        # Assume any line with alphabetic characters and spaces is a name
+        elif re.match(r'^[A-Za-z\s]+$', line):
+            data["name"] = line
+        # If none of the above, try to infer based on content
+        else:
+            # If transaction ID is missing and line is numeric
+            if data["transaction_id"] is None and line.isdigit():
+                data["transaction_id"] = line
+            # If phone number is missing and line matches phone number pattern
+            elif data["phone_number"] is None and re.match(r'^\d{10,15}$', line):
+                data["phone_number"] = line
+            # If asset tag is missing and line matches asset tag pattern
+            elif data["asset_tag"] is None and re.match(r'^[A-Za-z0-9\-]+$', line):
+                data["asset_tag"] = line
+            # If name is missing
+            elif data["name"] is None:
+                data["name"] = line
 
-with col1:
-    if st.button("Fix an account problem"):
-        generate_message("Fix an account problem")
-with col2:
-    if st.button("Trailer static issue"):
-        generate_message("Trailer static issue")
-with col3:
-    if st.button("XRM Account Reset"):
-        generate_message("XRM Account Reset")
+    # Check if essential data is missing
+    if not data["name"] or not data["issue"] or not data["transaction_id"]:
+        return None
+    else:
+        return data
 
-# Show a toast message using st.toast (experimental feature)
-if st.button("Submit"):
-    st.toast("Your request has been submitted.", icon="🎉")
+# Function to generate the appropriate message based on the issue
+def generate_message(data):
+    issue_type = data["issue"]
+
+    # Select summary, description, and internal message based on issue type
+    if issue_type == "ad":
+        summary = random.choice(password_reset_summaries)
+        description = random.choice(password_reset_descriptions)
+        internal_message = random.choice(password_reset_internal_messages)
+        app_name = "Active Directory"
+    elif issue_type == "xrm":
+        summary = random.choice(xrm_account_summaries)
+        description = random.choice(xrm_descriptions)
+        internal_message = random.choice(xrm_internal_messages)
+        app_name = "XRM"
+    elif issue_type == "spectra":
+        summary = random.choice(spectra_account_summaries)
+        description = random.choice(spectra_descriptions)
+        internal_message = random.choice(spectra_internal_messages)
+        app_name = "Spectra"
+    else:
+        summary = "Issue Summary"
+        description = "No specific description available for this issue type."
+        internal_message = "No internal message available for this issue type."
+        app_name = data["issue"]
+
+    # Display the generated request in the specified format
+    st.subheader("Raise this request on behalf of")
+    st.code(data['name'], language='text')
+
+    st.subheader("Application Name")
+    st.code(app_name, language='text')
+
+    st.subheader("Summary")
+    st.code(summary, language='text')
+
+    st.subheader("Description")
+    st.code(description, language='text')
+
+    # Display Transaction ID
+    st.subheader("Transaction ID")
+    st.code(data['transaction_id'], language='text')
+
+    # Optionally, display Asset Tag if it exists
+    if data.get('asset_tag'):
+        st.subheader("Asset Tag")
+        st.code(data['asset_tag'], language='text')
+
+    # Optionally, display Phone Number if it exists
+    if data.get('phone_number'):
+        st.subheader("Phone#")
+        st.code(data['phone_number'], language='text')
+
+    # Internal Message
+    st.subheader("Internal Message")
+    st.code(internal_message, language='text')
+
+# Parse the input and generate message when a button is clicked
+if st.button("Generate Request"):
+    parsed_data = parse_input(input_data)
+    if parsed_data:
+        generate_message(parsed_data)
+    else:
+        st.error("Please ensure the input contains at least Name, Issue, and Transaction ID.")

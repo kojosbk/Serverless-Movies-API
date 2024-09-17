@@ -48,20 +48,7 @@ spectra_account_summaries = [
     "Spectra Account Inaccessible - Assistance Required"
 ]
 
-# Corrected descriptions list for different issues
-xrm_descriptions = [
-    "I have been locked out of my XRM account despite multiple attempts to log in. Please assist in resetting my account.",
-    "XRM account reset is needed urgently. I cannot log in.",
-    "My XRM account is inaccessible, and I need help resetting it.",
-    "I forgot my XRM password. Please reset it for me.",
-    "I am unable to log in to my XRM account. Kindly assist with a password reset.",
-    "I've tried to log in to XRM several times, and it keeps failing. Please help me reset the password.",
-    "Locked out of my XRM account after multiple failed attempts. Please help me reset the password.",
-    "I cannot access my XRM account after a password issue. Assistance is required for resetting it.",
-    "My XRM account login keeps failing. I need a password reset.",
-    "XRM account access is blocked after several wrong password attempts. Help is needed."
-]
-
+# Descriptions list for different issues
 password_reset_descriptions = [
     "I am unable to access my account and need help resetting my password.",
     "I forgot my password and can't log into my account. Please reset it.",
@@ -73,6 +60,19 @@ password_reset_descriptions = [
     "I've forgotten my account password and need help resetting it.",
     "Account is inaccessible due to a forgotten password. Please reset it.",
     "I am locked out of my account and require a password reset."
+]
+
+xrm_descriptions = [
+    "I have been locked out of my XRM account despite multiple attempts to log in. Please assist in resetting my account.",
+    "XRM account reset is needed urgently. I cannot log in.",
+    "My XRM account is inaccessible, and I need help resetting it.",
+    "I forgot my XRM password. Please reset it for me.",
+    "I am unable to log in to my XRM account. Kindly assist with a password reset.",
+    "I've tried to log in to XRM several times, and it keeps failing. Please help me reset the password.",
+    "Locked out of my XRM account after multiple failed attempts. Please help me reset the password.",
+    "I cannot access my XRM account after a password issue. Assistance is required for resetting it.",
+    "My XRM account login keeps failing. I need a password reset.",
+    "XRM account access is blocked after several wrong password attempts. Help is needed."
 ]
 
 spectra_descriptions = [
@@ -89,6 +89,19 @@ spectra_descriptions = [
 ]
 
 # Internal messages
+password_reset_internal_messages = [
+    "The Active Directory account password has been successfully reset, and the issue has been resolved. The new password was provided to the user over the phone.",
+    "Password reset for Active Directory was successful. The new password was given to the user over the phone.",
+    "The password was reset for the user's Active Directory account, and the new password was provided over the phone.",
+    "Active Directory password was reset, and the user was informed of the new password over the phone.",
+    "The password reset for Active Directory resolved the issue. The user received the new password via phone.",
+    "Password reset on Active Directory has been completed, and the user was given the new password by phone.",
+    "The user’s Active Directory password has been reset, and the new password was communicated over the phone.",
+    "Password reset was successful. The user was given their new Active Directory password via phone.",
+    "The Active Directory password reset has resolved the issue. The new password was provided to the user over the phone.",
+    "The password was reset and shared with the user over the phone, successfully resolving the Active Directory issue."
+]
+
 xrm_internal_messages = [
     "Password has been unlocked and reset. User has been given the new password via Teams and over the phone.",
     "The XRM account password was reset, and the user was informed of the new password through Teams and phone.",
@@ -115,19 +128,6 @@ spectra_internal_messages = [
     "The account was unfrozen and the user was given the new password via Teams and phone."
 ]
 
-password_reset_internal_messages = [
-    "The Active Directory account password has been successfully reset, and the issue has been resolved. The new password was provided to the user over the phone.",
-    "Password reset for Active Directory was successful. The new password was given to the user over the phone.",
-    "The password was reset for the user's Active Directory account, and the new password was provided over the phone.",
-    "Active Directory password was reset, and the user was informed of the new password over the phone.",
-    "The password reset for Active Directory resolved the issue. The user received the new password via phone.",
-    "Password reset on Active Directory has been completed, and the user was given the new password by phone.",
-    "The user’s Active Directory password has been reset, and the new password was communicated over the phone.",
-    "Password reset was successful. The user was given their new Active Directory password via phone.",
-    "The Active Directory password reset has resolved the issue. The new password was provided to the user over the phone.",
-    "The password was reset and shared with the user over the phone, successfully resolving the Active Directory issue."
-]
-
 # Known issue types
 issue_types = ['ad', 'xrm', 'spectra']
 
@@ -144,11 +144,22 @@ def parse_input(input_data):
 
     for line in lines:
         line = line.strip()
-        # Check for issue type
-        if line.lower() in issue_types:
-            data["issue"] = line.lower()
+        line_lower = line.lower()
+        issue_found_in_line = False  # Flag to indicate if issue type was found in this line
+
+        # Check for issue type within the line using word boundaries
+        for issue in issue_types:
+            pattern = r'\b' + re.escape(issue) + r'\b'
+            if re.search(pattern, line_lower):
+                data["issue"] = issue
+                issue_found_in_line = True
+                break  # Exit the loop once the issue type is found
+
+        if issue_found_in_line:
+            continue  # Skip processing the rest of the line since issue type is already found
+
         # Check for transaction ID (assuming it's a 6-digit number)
-        elif re.match(r'^\d{6}$', line):
+        if re.match(r'^\d{6}$', line):
             data["transaction_id"] = line
         # Check for phone number (assuming it starts with + or country code and is 10+ digits)
         elif re.match(r'^(\+?\d{10,15})$', line):

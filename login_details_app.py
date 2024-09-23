@@ -21,14 +21,16 @@ def parse_input(data):
 def generate_password_from_name(first_name, last_name):
     first_part = first_name.lower()[:3]
     last_part = last_name.lower()[:3]
-    return generate_password_from_env()
+    password = generate_password_from_env()
+    return password.capitalize()
 
 def generate_spectra_pm_password(first_name, last_name):
     first3_first = first_name.lower()[:3]
     last3_last = last_name.lower()[-3:]
     last3_first = first_name.lower()[-3:]
     first3_last = last_name.lower()[:3]
-    return f"{first3_first}{last3_last}#2024{last3_first}{first3_last}"
+    password = f"{first3_first}{last3_last}#2024{last3_first}{first3_last}"
+    return password.capitalize()
 
 def generate_message(data):
     manager = capitalize_name(data.get("Hiring Manager Name", ""))
@@ -46,7 +48,7 @@ def generate_message(data):
     
     username = f"{first_name.lower()}.{last_name.lower()}"
     
-    # Generate passwords using the first 3 letters of first and last name plus #24
+    # Generate passwords with the first letter capitalized
     default_password = generate_password_from_name(first_name, last_name)
     spectra_pm_password = generate_spectra_pm_password(first_name, last_name)
 
@@ -114,38 +116,7 @@ def generate_message(data):
             "SEC_G_folder_redirection_IHGD-PS-VP-001", "SEC_G_CTX_PRC_Roch", "ReportingGroup_test",
             "ReportingGroup {d0fc2c1d-7893-4860-b23b-36a9d695a7b2}", "ReportingGroup {32ba4025-aa86-40b4-ac49-688f83484209}"
         ],
-        "Adaptation Nurse": [
-            "ihgd.inhealthgroup.com/IHGD Internal/IHGD Users/Clinical/Endoscopy/Folder redirection - Endoscopy/Schelma Rivas",
-            "SEC_G_License_F3", "Domain Users", "SEC_G_AOVPN_Users"
-        ],
-        "Triage Nurse": [
-            "SEC_G_OPERATIONS_NWCATS_SPOA FOLDER_SECURITY_RW_IHGD", "SEC_G_ALLCLINICAL_RW_IHGD", "SEC_G_Sentinel_SSO",
-            "SEC_G_License_E3", "SEC_G_KnowHow_Visitors", "Domain Users", "Sec_PDL_Allow", "Know How Shortcut deployment",
-            "SEC_G_AOVPN_Users", "Sec_G_Clinical_Reviewer", "Sec_G_InTune_BlkActSync_MDM", "SEC_G_OPERATIONS_NWCATS_STOCKPORT_FOLDER_SECURITY_RW_IHGD",
-            "SEC_G_Clinical_Endoscopy_Reports", "Sec_G_InTune_MDM_MTD_Compliant", "Sec_g_8x8_Sync", "SEC_G_Egress_POC",
-            "SEC_G_OPERATIONS_NWCATS_FOLDER_SECURITY_RW_IHGD", "SEC_G_folder_redirection_IHGD-PS-VP-001", "Sec_G_Endobase_nonexam_IHGD",
-            "ReportingGroup_test"
-        ],
-        "Receptionist BLS/MHP": [
-            "SEC_G_License_F3", "Domain Users", "SEC_G_License_F3_TAC", "SEC_G_AOVPN_Users"
-        ],
-        "Service Manager": [
-            "Sec_G_MRI", "SEC_G_License_E3", "SEC_G_OPERATIONS_DEPT_INSPECTION_FOLDER_STRATFORD_IHGD_RW",
-            "Domain Users", "SEC_G_ALL_CLINICAL_STAFF_FOLDER_MEMBERS_RW_IHGD", "SEC_G_OPERATIONS_LONDON_RW_IHGD",
-            "SEC_G_AOVPN_Users", "Sec_G_InTune_BYOD_Compliant", "SEC_G_Azure_AD_Laudio", "Sec_G_InTune_MDM_MTD_Compliant",
-            "Sec_G_Clinical_Enhanced", "SEC_G_folder_redirection_IHGD-PS-VP-001", "DL_All_eReq_Users", "ReportingGroup_test"
-        ],
-        "Administrator and Health Care Assistant": [
-            "SEC_G_Sentinel_SSO", "SEC_G_License_E3", "Domain Users", "SEC_G_AOVPN_Users", "Sec_G_Clinical_Reviewer",
-            "SEC_G_OPERATIONS_UOMRI_FOLDER_SECURITY_RW_IHGD", "SEC_G_Egress_POC", "DL_All_eReq_Users", "SEC_G_UPRIGHT_BIRMINGHAM_RW"
-        ],
-        "Clinical Assistant": [
-            "SEC_G_Sentinel_SSO", "SEC_G_License_E3", "SEC_G_MAYDAY_RW", "Domain Users", "SEC_G_AOVPN_Users", "Sec_G_InTune_BYOD_Compliant",
-            "SEC_G_All_Clinical_Staff", "Sec_G_InTune_MDM_MTD_Compliant", "Sec_G_Clinical_Enhanced", "SEC_G_folder_redirection_IHGD-PS-VP-001"
-        ],
-        "Bank Offshore Medic": [
-            "Domain Users", "SEC_G_AOVPN_Users", "SEC_G_License_EOL_Plan2"
-        ]
+        # Additional job titles and their groups can be added here
     }
 
     group_list = groups.get(job_title, [])
@@ -207,7 +178,7 @@ Your IT Team"""
         "User Email": user_email,
         "Department": company_name,
         "Spectra PM Username": f"{first_name.lower()}{last_name[0].lower()}super",
-        "Users Organization": "O0 - InHealth Intelligence Ltd",
+        "Users Organization": "(O0 - InHealth Intelligence Ltd)",
         "Spectra PM Password": spectra_pm_password,
         "NHS Email": "nomail@nhs.net",
         "Permissions": ", ".join(permissions),

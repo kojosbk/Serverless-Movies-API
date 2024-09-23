@@ -23,6 +23,13 @@ def generate_password_from_name(first_name, last_name):
     last_part = last_name.lower()[:3]
     return generate_password_from_env()
 
+def generate_spectra_pm_password(first_name, last_name):
+    first3_first = first_name.lower()[:3]
+    last3_last = last_name.lower()[-3:]
+    last3_first = first_name.lower()[-3:]
+    first3_last = last_name.lower()[:3]
+    return f"{first3_first}{last3_last}#2024{last3_first}{first3_last}"
+
 def generate_message(data):
     manager = capitalize_name(data.get("Hiring Manager Name", ""))
     name = capitalize_name(data.get("Candidate Name", ""))
@@ -41,7 +48,7 @@ def generate_message(data):
     
     # Generate passwords using the first 3 letters of first and last name plus #24
     default_password = generate_password_from_name(first_name, last_name)
-    spectra_pm_password = generate_password_from_name(first_name, last_name)
+    spectra_pm_password = generate_spectra_pm_password(first_name, last_name)
 
     permissions = []
     if data.get("Access Permissions for XRM", "").lower() != "no" and data.get("Access Permissions for XRM", "").strip():
@@ -200,6 +207,7 @@ Your IT Team"""
         "User Email": user_email,
         "Department": company_name,
         "Spectra PM Username": f"{first_name.lower()}{last_name[0].lower()}super",
+        "Users Organization": "O0 - InHealth Intelligence Ltd",
         "Spectra PM Password": spectra_pm_password,
         "NHS Email": "nomail@nhs.net",
         "Permissions": ", ".join(permissions),
@@ -294,7 +302,7 @@ if "generated_data" in st.session_state:
                     ]
                 elif section == "Spectra PM":
                     keys_to_display = [
-                        "Candidates First Name", "Candidates Last Name","Spectra PM Username", "Spectra PM Password", "NHS Email"
+                        "Candidates First Name", "Candidates Last Name", "Spectra PM Username", "Users Organization", "Spectra PM Password", "NHS Email"
                     ]
                 elif section == "8x8 VCC Account":
                     keys_to_display = [

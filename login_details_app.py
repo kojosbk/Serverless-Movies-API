@@ -48,7 +48,7 @@ def generate_message(data):
 
     username = f"{first_name.lower()}.{last_name.lower()}"
     default_password = generate_password_from_name(first_name, last_name)
-    spectra_pm_password = "Blue1957"
+    spectra_pm_password = f"{first_name[:2].capitalize()}{last_name[-2:].capitalize()}1957"
 
     manager_parts = manager_name.split()
     manager_username = f"{manager_parts[0].lower()}.{manager_parts[-1].lower()}" if len(manager_parts) >= 2 else manager_parts[0].lower()

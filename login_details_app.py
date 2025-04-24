@@ -67,6 +67,7 @@ def generate_message(data):
         company_display = "Health Intelligence"
         ad_create_script = f"""```powershell
 New-ADUser -Name \"{name}\" `
+    -SamAccountName \"{username}\" `
     -GivenName \"{first_name}\" `
     -Surname \"{last_name}\" `
     -DisplayName \"{name}\" `
@@ -79,6 +80,7 @@ New-ADUser -Name \"{name}\" `
     -Company \"Health-Intelligence\" `
     -Manager \"{manager_username}\" `
     -AccountPassword (ConvertTo-SecureString \"{default_password}\" -AsPlainText -Force) `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
     -Enabled $true
 ```"""
         ad_update_script = f"""```powershell
@@ -89,6 +91,7 @@ Set-ADUser -Identity \"{username}\" `
     -Description \"{job_title}\" `
     -Office \"{location}\" `
     -EmailAddress \"{username}@inhealthgroup.com\" `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
     -Company \"Inhealthgroup\"
 ```"""
         sections = [

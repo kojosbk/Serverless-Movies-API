@@ -66,25 +66,30 @@ def generate_message(data):
         user_email = f"{username}@inhealthgroup.com"
         company_display = "Health Intelligence"
         ad_create_script = f"""```powershell
-New-ADUser -Name \"{name}\" `
-    -SamAccountName \"{username}\" `
-    -GivenName \"{first_name}\" `
-    -Surname \"{last_name}\" `
-    -DisplayName \"{name}\" `
-    -Description \"{job_title}\" `
-    -Title \"{job_title}\" `
-    -Department \"{company_name}\" `
-    -Office \"{location}\" `
-    -EmailAddress \"{username}@inhealthgroup.com\" `
-    -Path \"OU=AHW DESP,OU=HIUsers,DC=hi,DC=int\" `
-    -Company \"Health-Intelligence\" `
-    -Manager \"{manager_username}\" `
-    -AccountPassword (ConvertTo-SecureString \"{default_password}\" -AsPlainText -Force) `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-    -Enabled $true
+if (-not (Get-ADUser -Filter {{SamAccountName -eq '{username}'}})) {{
+    New-ADUser -Name \"{name}\" `
+        -SamAccountName \"{username}\" `
+        -GivenName \"{first_name}\" `
+        -Surname \"{last_name}\" `
+        -DisplayName \"{name}\" `
+        -Description \"{job_title}\" `
+        -Title \"{job_title}\" `
+        -Department \"{company_name}\" `
+        -Office \"{location}\" `
+        -EmailAddress \"{username}@inhealthgroup.com\" `
+        -Path \"OU=AHW DESP,OU=HIUsers,DC=hi,DC=int\" `
+        -Company \"Health-Intelligence\" `
+        -Manager \"{manager_username}\" `
+        -AccountPassword (ConvertTo-SecureString \"{default_password}\" -AsPlainText -Force) `
+        -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
+        -Enabled $true
+}} else {{ Write-Host \"User {username} already exists.\" }}
+```
 ```"""
         ad_update_script = f"""```powershell
 Set-ADUser -Identity \"{username}\" `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `\"{username}\" `
     -Title \"{job_title}\" `
     -Department \"{company_name}\" `
     -Manager \"{manager_username}\" `
@@ -110,6 +115,7 @@ Set-ADUser -Identity \"{username}\" `
     -Department \"{company_name}\" `
     -Manager \"{manager_username}\" `
     -Description \"{job_title}\" `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
     -Office \"{location}\" `
     -EmailAddress \"{username}@tachealthcare.com\" `
     -Company \"{company_display}\"
@@ -125,6 +131,7 @@ Set-ADUser -Identity \"{username}\" `
     -Manager \"{manager_username}\" `
     -Description \"{job_title}\" `
     -Office \"{location}\" `
+    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
     -EmailAddress \"{username}@inhealthgroup.com\" `
     -Company \"{company_display}\"
 ```"""

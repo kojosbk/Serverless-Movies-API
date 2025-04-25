@@ -1,19 +1,15 @@
 import streamlit as st
 import re
 from datetime import datetime
-import secrets
-import string
 
 st.set_page_config(page_title="Employee Management Tools", layout="wide")
 st.title("🛠️ Employee Management Toolkit")
 
-# -------------------------------
-# Section 1: Job Change Parser
-# -------------------------------
+# Section 1: Job Change Notification Parser
 with st.expander("📌 Job Change Notification Parser", expanded=False):
     notification_text = st.text_area("Paste the Employee Job Change Notification here:")
 
-    if st.button("Generate PowerShell Files"):
+    if st.button("Generate PowerShell Files", key="job_change"):
         if not notification_text:
             st.warning("Please paste the notification text.")
         else:
@@ -89,7 +85,7 @@ Set-ADUser -Identity "{username}" ``
 
 Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green
 "@
-$filePath = "$env:USERPROFILE\\Documents\\{script_filename}"
+$filePath = "$env:USERPROFILE\Documents\{script_filename}"
 $script | Set-Content -Path $filePath -Encoding UTF8
 Write-Host "📁 Script saved to $filePath" -ForegroundColor Cyan
 Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Script will run on the effective date." -ForegroundColor Yellow
@@ -98,7 +94,7 @@ Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Script will run on t
                     st.subheader("PowerShell Script (.ps1) Content")
                     st.code(ps_logic, language='powershell')
 
-                    escaped_script_path = f"$env:USERPROFILE\\Documents\\{script_filename}"
+                    escaped_script_path = f"$env:USERPROFILE\Documents\{script_filename}"
                     task_name = f"Update {employee_name} Job Details"
                     run_time = effective_date.strftime('%Y-%m-%d 09:00AM')
 
@@ -116,14 +112,13 @@ Write-Host "✅ Scheduled task '$taskName' to run on $($runDate.ToString('f'))."
 
                     st.subheader("Scheduling Task Script")
                     st.code(schedule_task_script, language='powershell')
-
                 else:
                     immediate_script = f'''# Immediate update for {employee_name}
-Set-ADUser -Identity "{username}" `
-    -Title "{new_job_title}" `
-    -Department "{new_department}" `
-    -Description "{new_job_title}" `
-    -Office "{new_department}" `
+Set-ADUser -Identity "{username}" ``
+    -Title "{new_job_title}" ``
+    -Department "{new_department}" ``
+    -Description "{new_job_title}" ``
+    -Office "{new_department}" ``
     -Manager "{manager_username}"
 
 Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green'''
@@ -133,9 +128,85 @@ Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Gree
             else:
                 st.error("Could not extract necessary details from notification.")
 
-# -------------------------------
-# Section 2: M1 User Onboarding
-# -------------------------------
+# Section 3: Manager Change Parser
+with st.expander("🔄 Manager Change Parser", expanded=False):
+    manager_change_text = st.text_area("Paste Manager Change Notification here:")
+
+    if st.button("Generate Manager Change PowerShell", key="manager_change"):
+        if not manager_change_text:
+            st.warning("Please paste the manager change notification.")
+        else:
+            emp_match = re.search(r"Employee Name:\s*(.+)", manager_change_text)
+            id_match = re.search(r"Employee ref #\s*(\d+)", manager_change_text)
+            date_match = re.search(r"Change effective from:\s*(\d{2}/\d{2}/\d{4})", manager_change_text)
+            mgr_match = re.search(r"New Manager:\s*(.+)", manager_change_text)
+
+            if emp_match and id_match and date_match and mgr_match:
+                employee_name = emp_match.group(1).strip()
+                employee_id = id_match.group(1).strip()
+                effective_date = datetime.strptime(date_match.group(1), "%d/%m/%Y")
+                new_manager = mgr_match.group(1).strip()
+
+                username = employee_name.replace(" ", ".")
+                manager_username = new_manager.replace(" ", ".")
+                today = datetime.today()
+
+                if effective_date > today:
+                    scheduled_script = f'''# Scheduled manager update for {employee_name}
+$userName = "{employee_name}"
+$managerName = "{new_manager}"
+$targetDate = Get-Date "{effective_date.strftime('%Y-%m-%d')}"
+$today = Get-Date
+
+if ($today -ge $targetDate) {{
+    $user = Get-ADUser -Filter \"Name -eq '$userName'\" -Properties Manager
+    if ($user) {{
+        $manager = Get-ADUser -Filter \"Name -eq '$managerName'\"
+        if ($manager) {{
+            Set-ADUser -Identity $user.DistinguishedName ``
+                -Manager $manager.DistinguishedName
+            Write-Host \"✅ Updated manager for $userName.\" -ForegroundColor Green
+        }} else {{
+            Write-Host \"❌ Manager '$managerName' not found.\" -ForegroundColor Red
+        }}
+    }} else {{
+        Write-Host \"❌ User '$userName' not found.\" -ForegroundColor Red
+    }}
+}}'''
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(scheduled_script, language='powershell')
+
+                    script_filename = f"Update-{employee_name.replace(' ', '-')}-Manager.ps1"
+                    escaped_script_path = f"$env:USERPROFILE\Documents\{script_filename}"
+                    task_name = f"Update {employee_name} Manager"
+                    run_time = effective_date.strftime('%Y-%m-%d 09:00AM')
+
+                    schedule_task_script = f'''# Define script path and schedule time
+$scriptPath = "{escaped_script_path}"
+$taskName = "{task_name}"
+$runDate = Get-Date "{run_time}"
+
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `\"$scriptPath`\""
+$trigger = New-ScheduledTaskTrigger -Once -At $runDate
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
+
+Write-Host "✅ Scheduled task '$taskName' to run on $($runDate.ToString('f'))." -ForegroundColor Green'''
+                    st.subheader("Scheduling Task Script")
+                    st.code(schedule_task_script, language='powershell')
+
+                else:
+                    immediate_script = f'''# Immediate manager update for {employee_name}
+Set-ADUser -Identity "{username}" ``
+    -Manager "{manager_username}"
+
+Write-Host "✅ Updated manager for {employee_name}." -ForegroundColor Green'''
+
+
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(immediate_script, language='powershell')
+            else:
+                st.error("Could not extract all necessary manager change details.")
 
 import streamlit as st
 import re

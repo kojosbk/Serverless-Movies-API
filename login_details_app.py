@@ -1,5 +1,144 @@
 import streamlit as st
 import re
+from datetime import datetime
+import secrets
+import string
+
+st.set_page_config(page_title="Employee Management Tools", layout="wide")
+st.title("🛠️ Employee Management Toolkit")
+
+# -------------------------------
+# Section 1: Job Change Parser
+# -------------------------------
+with st.expander("📌 Job Change Notification Parser", expanded=False):
+    notification_text = st.text_area("Paste the Employee Job Change Notification here:")
+
+    if st.button("Generate PowerShell Files"):
+        if not notification_text:
+            st.warning("Please paste the notification text.")
+        else:
+            match = re.search(r"^(.*?) \(Employee reference #(\d+)\)", notification_text, re.MULTILINE)
+            if match:
+                employee_name = match.group(1).strip()
+                employee_id = match.group(2).strip()
+            else:
+                st.error("Could not extract employee name.")
+                st.stop()
+
+            date_match = re.search(r'effect from (\d{2}/\d{2}/\d{4})', notification_text)
+
+            if date_match:
+                effective_date_str = date_match.group(1)
+                effective_date = datetime.strptime(effective_date_str, "%d/%m/%Y")
+                today = datetime.today()
+
+                new_details_section = notification_text.split("New Job details :")[-1]
+
+                try:
+                    new_job_title = re.search(r'Job title\s*:\s*(.+)', new_details_section).group(1).strip()
+                    new_department = re.search(r'Department\s*:\s*(.+)', new_details_section).group(1).strip()
+                    new_manager_line = re.search(r'Reporting Line\s*:\s*(.+)', new_details_section).group(1).strip()
+                    new_manager = new_manager_line.split('-')[-1].strip()
+                except AttributeError:
+                    st.error("Could not extract all job details. Please check the formatting.")
+                    st.stop()
+
+                username = employee_name.replace(" ", ".")
+                manager_username = new_manager.replace(" ", ".")
+
+                if effective_date > today:
+                    script_filename = f"Update-{employee_name.replace(' ', '-')}-Job.ps1"
+                    ps_logic = f'''# Scheduled user update for {employee_name}
+$userName = "{employee_name}"
+$newTitle = "{new_job_title}"
+$newDepartment = "{new_department}"
+$newDescription = "{new_job_title}"
+$newOffice = "{new_department}"
+$managerName = "{new_manager}"
+$targetDate = Get-Date "{effective_date.strftime('%Y-%m-%d')}"
+
+$today = Get-Date
+
+if ($today -ge $targetDate) {{
+    $user = Get-ADUser -Filter "Name -eq '$userName'" -Properties Title, Department, Description, Office, Manager
+    if ($user) {{
+        $manager = Get-ADUser -Filter "Name -eq '$managerName'"
+        if ($manager) {{
+            Set-ADUser -Identity $user.DistinguishedName `` 
+                -Title $newTitle `` 
+                -Department $newDepartment `` 
+                -Description $newDescription `` 
+                -Office $newOffice `` 
+                -Manager $manager.DistinguishedName
+            Write-Host "✅ Successfully updated job details for $userName." -ForegroundColor Green
+        }} else {{
+            Write-Host "❌ Manager '$managerName' not found." -ForegroundColor Red
+        }}
+    }} else {{
+        Write-Host "❌ User '$userName' not found." -ForegroundColor Red
+    }}
+}} else {{
+$script = @"
+# Immediate update for {employee_name}
+Set-ADUser -Identity "{username}" ``
+    -Title "{new_job_title}" ``
+    -Department "{new_department}" ``
+    -Description "{new_job_title}" ``
+    -Office "{new_department}" ``
+    -Manager "{manager_username}"
+
+Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green
+"@
+$filePath = "$env:USERPROFILE\\Documents\\{script_filename}"
+$script | Set-Content -Path $filePath -Encoding UTF8
+Write-Host "📁 Script saved to $filePath" -ForegroundColor Cyan
+Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Script will run on the effective date." -ForegroundColor Yellow
+}}'''
+
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(ps_logic, language='powershell')
+
+                    escaped_script_path = f"$env:USERPROFILE\\Documents\\{script_filename}"
+                    task_name = f"Update {employee_name} Job Details"
+                    run_time = effective_date.strftime('%Y-%m-%d 09:00AM')
+
+                    schedule_task_script = f'''# Define script path and schedule time
+$scriptPath = "{escaped_script_path}"
+$taskName = "{task_name}"
+$runDate = Get-Date "{run_time}"
+
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `\"$scriptPath`\""
+$trigger = New-ScheduledTaskTrigger -Once -At $runDate
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
+
+Write-Host "✅ Scheduled task '$taskName' to run on $($runDate.ToString('f'))." -ForegroundColor Green'''
+
+                    st.subheader("Scheduling Task Script")
+                    st.code(schedule_task_script, language='powershell')
+
+                else:
+                    immediate_script = f'''# Immediate update for {employee_name}
+Set-ADUser -Identity "{username}" `
+    -Title "{new_job_title}" `
+    -Department "{new_department}" `
+    -Description "{new_job_title}" `
+    -Office "{new_department}" `
+    -Manager "{manager_username}"
+
+Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green'''
+
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(immediate_script, language='powershell')
+            else:
+                st.error("Could not extract necessary details from notification.")
+
+# -------------------------------
+# Section 2: M1 User Onboarding
+# -------------------------------
+
+import streamlit as st
+import re
 import secrets
 import string
 

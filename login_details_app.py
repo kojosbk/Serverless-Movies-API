@@ -298,8 +298,6 @@ if (-not (Get-ADUser -Filter {{SamAccountName -eq '{username}'}})) {{
 ```"""
         ad_update_script = f"""```powershell
 Set-ADUser -Identity \"{username}\" `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `\"{username}\" `
     -Title \"{job_title}\" `
     -Department \"{company_name}\" `
     -Manager \"{manager_username}\" `
@@ -360,8 +358,8 @@ Username: {username}
 User Email: {user_email}
 Password: {default_password}
 
-Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
-Spectra PM Password: {spectra_pm_password}
+# Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
+# Spectra PM Password: {spectra_pm_password}
 
 Best regards,
 Your IT Team"""

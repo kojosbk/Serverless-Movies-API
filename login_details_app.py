@@ -207,6 +207,90 @@ Write-Host "✅ Updated manager for {employee_name}." -ForegroundColor Green'''
                     st.code(immediate_script, language='powershell')
             else:
                 st.error("Could not extract all necessary manager change details.")
+with st.expander("🛑 Leaver Notification Parser", expanded=False):
+    leaver_text = st.text_area("Paste Leaver Notification here:")
+
+    if st.button("Generate Disable User PowerShell", key="disable_user"):
+        if not leaver_text:
+            st.warning("Please paste the leaver notification.")
+        else:
+            emp_match = re.search(r"^(.*?) has been made a leaver", leaver_text)
+            id_match = re.search(r"Employee Reference #:\s*(\d+)", leaver_text)
+            date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", leaver_text)
+            mgr_match = re.search(r"Reporting Manager:\s*(.+)", leaver_text)
+
+            if emp_match and id_match and date_match and mgr_match:
+                employee_name = emp_match.group(1).strip()
+                leaving_date = datetime.strptime(date_match.group(1), "%d/%m/%Y")
+                sam_account_name = employee_name.lower().replace(" ", ".")
+                today = datetime.today()
+                date_string = leaving_date.strftime("%d/%m/%Y")
+                filename_suffix = employee_name.replace(" ", "-")
+                script_filename = f"Disable-{filename_suffix}.ps1"
+                ou_path = "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com"
+                description_suffix = f"Leaving Date: {date_string}"
+
+                ps_script_content = rf"""$samAccountName = "{sam_account_name}"
+
+try {{
+    $user = Get-ADUser -Identity $samAccountName -Properties Description, DistinguishedName
+
+    if ($user) {{
+        $existingDesc = $user.Description
+        $leavingNote = "{description_suffix}"
+
+        if ([string]::IsNullOrWhiteSpace($existingDesc)) {{
+            $updatedDesc = $leavingNote
+        }} else {{
+            $updatedDesc = "$existingDesc - $leavingNote"
+        }}
+
+        Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc
+        Set-ADUser -Identity $user.DistinguishedName -Enabled $false
+        Move-ADObject -Identity $user.DistinguishedName -TargetPath "{ou_path}"
+
+        Write-Host "✅ User '$samAccountName' disabled and moved." -ForegroundColor Green
+    }}
+}}
+catch {{
+    Write-Host "❌ User '$samAccountName' not found or an error occurred." -ForegroundColor Red
+    Write-Host "Error details: $_" -ForegroundColor DarkRed
+}}"""
+
+                if leaving_date > today:
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(ps_script_content, language='powershell')
+
+                    schedule_script = rf"""# Save script and schedule for future execution
+$scriptContent = @"
+{ps_script_content}
+"@
+
+$scriptPath = "$env:USERPROFILE\Documents\{script_filename}"
+$scriptContent | Set-Content -Path $scriptPath -Encoding UTF8
+
+$taskName = "Disable {employee_name} Account"
+$runDate = Get-Date "{leaving_date.strftime('%Y-%m-%d')} 20:00"
+
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$scriptPath`""
+$trigger = New-ScheduledTaskTrigger -Once -At $runDate
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
+
+Write-Host "✅ Scheduled disable task for {employee_name} on $($runDate.ToString('f'))" -ForegroundColor Green"""
+
+                    st.subheader("Task Scheduler Script")
+                    st.code(schedule_script, language='powershell')
+
+                else:
+                    st.subheader("PowerShell Script (.ps1) Content")
+                    st.code(ps_script_content, language='powershell')
+
+            else:
+                st.error("Could not extract all necessary leaver details.")
+# ------------------------------
+# Section 4: m1
+# ------------------------------
 
 import streamlit as st
 import re

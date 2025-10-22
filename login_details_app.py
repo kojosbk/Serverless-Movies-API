@@ -1,548 +1,1241 @@
+"""
+Employee Management Toolkit - Improved Version
+===============================================
+A Streamlit application for automating HR and IT tasks including:
+- Job change notifications
+- Manager changes  
+- Employee offboarding
+- New employee onboarding
+
+Key Improvements:
+- Better code organization with helper functions
+- Enhanced error handling and validation
+- Improved security features
+- Better UI/UX with download buttons
+- Comprehensive documentation
+- Fixed logic bugs
+
+Author: Employee Management Team
+Last Updated: October 2025
+"""
+
 import streamlit as st
 import re
 from datetime import datetime
+from typing import Dict, Optional, Tuple, List
+import secrets
+import string
 
-st.set_page_config(page_title="Employee Management Tools", layout="wide")
-st.title("🛠️ Employee Management Toolkit")
+# ============================================================================
+# CONSTANTS
+# ============================================================================
+
+# Active Directory Configuration
+AD_DISABLED_OU = "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com"
+AD_HI_USER_PATH = "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int"
+
+# Company Configuration
+COMPANY_CONFIGS = {
+    "Health Intelligence": {
+        "email_domain": "@inhealthgroup.com",
+        "display_name": "Health-Intelligence",
+        "ad_path": AD_HI_USER_PATH,
+        "sections": ["Office 365 Account", "Ad Account", "Spectra PM", "8x8 VCC Account"]
+    },
+    "TAC Healthcare": {
+        "email_domain": "@tachealthcare.com",
+        "display_name": "TAC Healthcare",
+        "ad_path": None,
+        "sections": ["Office 365 Account", "Ad Account"]
+    },
+    "InHealth Group": {
+        "email_domain": "@inhealthgroup.com",
+        "display_name": "InHealth Group",
+        "ad_path": None,
+        "sections": ["Office 365 Account", "Ad Account"]
+    }
+}
+
+# Default scheduling times for automated tasks
+DEFAULT_TASK_TIME = "09:00AM"
+LEAVER_TASK_TIME = "20:00"
+
+# ============================================================================
+# PAGE CONFIGURATION
+# ============================================================================
+
+st.set_page_config(
+    page_title="Employee Management Toolkit",
+    page_icon="🛠️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        margin-bottom: 1rem;
+    }
+    .success-box {
+        padding: 1rem;
+        background-color: #d4edda;
+        border-left: 5px solid #28a745;
+        margin: 1rem 0;
+    }
+    .warning-box {
+        padding: 1rem;
+        background-color: #fff3cd;
+        border-left: 5px solid #ffc107;
+        margin: 1rem 0;
+    }
+    .info-box {
+        padding: 1rem;
+        background-color: #d1ecf1;
+        border-left: 5px solid #17a2b8;
+        margin: 1rem 0;
+    }
+    .stDownloadButton button {
+        width: 100%;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown('<h1 class="main-header">🛠️ Employee Management Toolkit</h1>', unsafe_allow_html=True)
+st.markdown("*Automate employee lifecycle management with ease*")
+st.markdown("---")
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def sanitize_username(name: str) -> str:
+    """Convert a full name to a username format (firstname.lastname), using only first and last name."""
+    if not name:
+        return ""
+    name_parts = name.strip().split()
+    if len(name_parts) == 0:
+        return ""
+    elif len(name_parts) == 1:
+        return name_parts[0].lower()
+    else:
+        # Only use first and last name, ignore middle names
+        return f"{name_parts[0]}.{name_parts[-1]}".lower()
+
+def validate_date_format(date_str: str, format_str: str = "%d/%m/%Y") -> Optional[datetime]:
+    """Validate and parse a date string."""
+    try:
+        return datetime.strptime(date_str, format_str)
+    except (ValueError, TypeError):
+        return None
+
+def create_download_button(content: str, filename: str, label: str, file_type: str = "text") -> None:
+    """Create a download button for script content."""
+    st.download_button(
+        label=f"⬇️ {label}",
+        data=content,
+        file_name=filename,
+        mime="text/plain" if file_type == "text" else "application/octet-stream",
+        use_container_width=True
+    )
+
+def display_script_with_download(script_content: str, title: str, filename: str) -> None:
+    """Display PowerShell script with syntax highlighting and download button."""
+    st.subheader(title)
+    st.code(script_content, language='powershell')
+    create_download_button(script_content, filename, f"Download {filename}")
+
+def generate_secure_password(length: int = 12) -> str:
+    """Generate a secure random password."""
+    characters = string.ascii_letters + string.digits + "!@#$%"
+    return ''.join(secrets.choice(characters) for _ in range(length))
+
+def capitalize_name(name: str) -> str:
+    """Properly capitalize a person's name."""
+    if not name:
+        return ""
+    return " ".join(word.capitalize() for word in name.split())
+
+# ============================================================================
+# JOB CHANGE NOTIFICATION PARSER
+# ============================================================================
+
+def parse_job_change_notification(notification_text: str) -> Optional[Dict]:
+    """
+    Parse job change notification and extract relevant details.
+    
+    Args:
+        notification_text: Raw notification text
+        
+    Returns:
+        Dictionary with parsed details or None if parsing fails
+    """
+    try:
+        # Extract employee name and ID
+        employee_match = re.search(r"^(.*?) \(Employee reference #(\d+)\)", notification_text, re.MULTILINE)
+        if not employee_match:
+            return None
+        
+        employee_name = employee_match.group(1).strip()
+        employee_id = employee_match.group(2).strip()
+        
+        # Extract first and last name only (ignore middle names)
+        employee_name_parts = employee_name.split()
+        if len(employee_name_parts) > 2:
+            employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
+        
+        # Extract effective date
+        date_match = re.search(r'effect from (\d{2}/\d{2}/\d{4})', notification_text)
+        if not date_match:
+            return None
+        
+        effective_date = validate_date_format(date_match.group(1))
+        if not effective_date:
+            return None
+        
+        # Extract new job details
+        new_details_section = notification_text.split("New Job details :")[-1]
+        
+        job_title_match = re.search(r'Job title\s*:\s*(.+)', new_details_section)
+        department_match = re.search(r'Department\s*:\s*(.+)', new_details_section)
+        manager_match = re.search(r'Reporting Line\s*:\s*(.+)', new_details_section)
+        
+        if not all([job_title_match, department_match, manager_match]):
+            return None
+        
+        new_job_title = job_title_match.group(1).strip()
+        new_department = department_match.group(1).strip()
+        manager_line = manager_match.group(1).strip()
+        new_manager = manager_line.split('-')[-1].strip()
+        
+        # Extract first and last name only for manager (ignore middle names)
+        manager_name_parts = new_manager.split()
+        if len(manager_name_parts) > 2:
+            new_manager = f"{manager_name_parts[0]} {manager_name_parts[-1]}"
+        
+        return {
+            'employee_name': employee_name,
+            'employee_id': employee_id,
+            'effective_date': effective_date,
+            'new_job_title': new_job_title,
+            'new_department': new_department,
+            'new_manager': new_manager,
+            'username': sanitize_username(employee_name),
+            'manager_username': sanitize_username(new_manager)
+        }
+    except Exception as e:
+        st.error(f"Error parsing notification: {str(e)}")
+        return None
+
+def generate_job_change_script(details: Dict, is_scheduled: bool = False) -> str:
+    """Generate PowerShell script for job change."""
+    if is_scheduled:
+        return f'''# Scheduled user update for {details['employee_name']}
+$userName = "{details['employee_name']}"
+$newTitle = "{details['new_job_title']}"
+$newDepartment = "{details['new_department']}"
+$newDescription = "{details['new_job_title']}"
+$newOffice = "{details['new_department']}"
+$managerName = "{details['new_manager']}"
+$targetDate = Get-Date "{details['effective_date'].strftime('%Y-%m-%d')}"
+
+$today = Get-Date
+
+if ($today -ge $targetDate) {{
+    try {{
+        $user = Get-ADUser -Filter "Name -eq '$userName'" -Properties Title, Department, Description, Office, Manager -ErrorAction Stop
+        
+        if ($user) {{
+            $manager = Get-ADUser -Filter "Name -eq '$managerName'" -ErrorAction Stop
+            
+            if ($manager) {{
+                Set-ADUser -Identity $user.DistinguishedName `
+                    -Title $newTitle `
+                    -Department $newDepartment `
+                    -Description $newDescription `
+                    -Office $newOffice `
+                    -Manager $manager.DistinguishedName `
+                    -ErrorAction Stop
+                    
+                Write-Host "✅ Successfully updated job details for $userName." -ForegroundColor Green
+            }} else {{
+                Write-Host "❌ Manager '$managerName' not found." -ForegroundColor Red
+            }}
+        }} else {{
+            Write-Host "❌ User '$userName' not found." -ForegroundColor Red
+        }}
+    }} catch {{
+        Write-Host "❌ Error updating user: $_" -ForegroundColor Red
+    }}
+}} else {{
+    Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Current date: $($today.ToShortDateString())" -ForegroundColor Yellow
+}}'''
+    else:
+        return f'''# Immediate update for {details['employee_name']}
+try {{
+    $user = Get-ADUser -Filter "SamAccountName -eq '{details['username']}'" -ErrorAction Stop
+    
+    if ($user) {{
+        $manager = Get-ADUser -Filter "SamAccountName -eq '{details['manager_username']}'" -ErrorAction Stop
+        
+        if ($manager) {{
+            Set-ADUser -Identity $user.DistinguishedName `
+                -Title "{details['new_job_title']}" `
+                -Department "{details['new_department']}" `
+                -Description "{details['new_job_title']}" `
+                -Office "{details['new_department']}" `
+                -Manager $manager.DistinguishedName `
+                -ErrorAction Stop
+                
+            Write-Host "✅ Job update for {details['employee_name']} completed." -ForegroundColor Green
+        }} else {{
+            Write-Host "❌ Manager not found." -ForegroundColor Red
+        }}
+    }} else {{
+        Write-Host "❌ User not found." -ForegroundColor Red
+    }}
+}} catch {{
+    Write-Host "❌ Error: $_" -ForegroundColor Red
+}}'''
+
+def generate_scheduled_task_script(script_filename: str, task_name: str, run_time: str) -> str:
+    """Generate PowerShell script to create a scheduled task."""
+    return f'''# Create scheduled task for automated execution
+$scriptPath = "$env:USERPROFILE\\Documents\\{script_filename}"
+$taskName = "{task_name}"
+$runDate = Get-Date "{run_time}"
+
+try {{
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$scriptPath`""
+    $trigger = New-ScheduledTaskTrigger -Once -At $runDate
+    
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force -ErrorAction Stop
+    
+    Write-Host "✅ Scheduled task '$taskName' created successfully." -ForegroundColor Green
+    Write-Host "📅 Task will run on: $($runDate.ToString('f'))" -ForegroundColor Cyan
+}} catch {{
+    Write-Host "❌ Error creating scheduled task: $_" -ForegroundColor Red
+}}'''
 
 # Section 1: Job Change Notification Parser
 with st.expander("📌 Job Change Notification Parser", expanded=False):
-    notification_text = st.text_area("Paste the Employee Job Change Notification here:")
+    st.markdown("""
+    **Instructions:** Paste the employee job change notification text below.
+    The system will extract details and generate the appropriate PowerShell scripts.
+    """)
+    
+    notification_text = st.text_area(
+        "Paste the Employee Job Change Notification here:",
+        height=200,
+        help="Copy and paste the entire job change notification email or document",
+        key="job_change_text"
+    )
 
-    if st.button("Generate PowerShell Files", key="job_change"):
-        if not notification_text:
-            st.warning("Please paste the notification text.")
+    if st.button("🚀 Generate PowerShell Scripts", key="job_change", type="primary"):
+        if not notification_text.strip():
+            st.warning("⚠️ Please paste the notification text before generating scripts.")
         else:
-            match = re.search(r"^(.*?) \(Employee reference #(\d+)\)", notification_text, re.MULTILINE)
-            if match:
-                employee_name = match.group(1).strip()
-                employee_id = match.group(2).strip()
+            with st.spinner("🔄 Parsing notification..."):
+                details = parse_job_change_notification(notification_text)
+            
+            if not details:
+                st.error("❌ Could not extract employee details. Please check the notification format.")
+                st.info("""
+                **Expected format:**
+                - Employee name and reference number
+                - Effective date (DD/MM/YYYY format)
+                - New Job details section with Job title, Department, and Reporting Line
+                """)
             else:
-                st.error("Could not extract employee name.")
-                st.stop()
-
-            date_match = re.search(r'effect from (\d{2}/\d{2}/\d{4})', notification_text)
-
-            if date_match:
-                effective_date_str = date_match.group(1)
-                effective_date = datetime.strptime(effective_date_str, "%d/%m/%Y")
                 today = datetime.today()
+                is_future = details['effective_date'] > today
+                
+                # Display extracted information
+                st.success("✅ Successfully parsed notification!")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Employee", details['employee_name'])
+                    st.metric("Employee ID", details['employee_id'])
+                with col2:
+                    st.metric("New Job Title", details['new_job_title'])
+                    st.metric("Department", details['new_department'])
+                with col3:
+                    st.metric("New Manager", details['new_manager'])
+                    st.metric("Effective Date", details['effective_date'].strftime('%d/%m/%Y'))
+                
+                st.markdown("---")
+                
+                # Generate appropriate scripts
+                script_filename = f"Update-{details['employee_name'].replace(' ', '-')}-Job.ps1"
+                job_script = generate_job_change_script(details, is_scheduled=is_future)
+                
+                if is_future:
+                    days_until = (details['effective_date'] - today).days
+                    st.info(f"📅 This change is scheduled for the future ({days_until} days from now)")
+                    
+                    display_script_with_download(
+                        job_script,
+                        "📄 Job Update PowerShell Script",
+                        script_filename
+                    )
+                    
+                    st.markdown("---")
+                    
+                    task_name = f"Update {details['employee_name']} Job Details"
+                    run_time = details['effective_date'].strftime(f'%Y-%m-%d {DEFAULT_TASK_TIME}')
+                    schedule_script = generate_scheduled_task_script(script_filename, task_name, run_time)
+                    
+                    display_script_with_download(
+                        schedule_script,
+                        "⏰ Task Scheduler Script",
+                        f"Schedule-{details['employee_name'].replace(' ', '-')}-Job.ps1"
+                    )
+                    
+                    st.warning("⚠️ **Important:** Save the job update script to your Documents folder first, then run the scheduler script.")
+                else:
+                    st.info("⚡ This change is effective immediately")
+                    display_script_with_download(
+                        job_script,
+                        "📄 Immediate Job Update Script",
+                        script_filename
+                    )
 
-                new_details_section = notification_text.split("New Job details :")[-1]
+# ============================================================================
+# MANAGER CHANGE PARSER
+# ============================================================================
 
-                try:
-                    new_job_title = re.search(r'Job title\s*:\s*(.+)', new_details_section).group(1).strip()
-                    new_department = re.search(r'Department\s*:\s*(.+)', new_details_section).group(1).strip()
-                    new_manager_line = re.search(r'Reporting Line\s*:\s*(.+)', new_details_section).group(1).strip()
-                    new_manager = new_manager_line.split('-')[-1].strip()
-                except AttributeError:
-                    st.error("Could not extract all job details. Please check the formatting.")
-                    st.stop()
+def parse_manager_change_notification(text: str) -> Optional[Dict]:
+    """Parse manager change notification and extract details."""
+    try:
+        emp_match = re.search(r"Employee Name:\s*(.+)", text)
+        id_match = re.search(r"Employee ref #\s*(\d+)", text)
+        date_match = re.search(r"Change effective from:\s*(\d{2}/\d{2}/\d{4})", text)
+        mgr_match = re.search(r"New Manager:\s*(.+)", text)
 
-                username = employee_name.replace(" ", ".")
-                manager_username = new_manager.replace(" ", ".")
+        if not all([emp_match, id_match, date_match, mgr_match]):
+            return None
 
-                if effective_date > today:
-                    script_filename = f"Update-{employee_name.replace(' ', '-')}-Job.ps1"
-                    ps_logic = f'''# Scheduled user update for {employee_name}
-$userName = "{employee_name}"
-$newTitle = "{new_job_title}"
-$newDepartment = "{new_department}"
-$newDescription = "{new_job_title}"
-$newOffice = "{new_department}"
-$managerName = "{new_manager}"
-$targetDate = Get-Date "{effective_date.strftime('%Y-%m-%d')}"
+        effective_date = validate_date_format(date_match.group(1))
+        if not effective_date:
+            return None
 
+        employee_name = emp_match.group(1).strip()
+        new_manager = mgr_match.group(1).strip()
+        
+        # Extract first and last name only (ignore middle names)
+        employee_name_parts = employee_name.split()
+        if len(employee_name_parts) > 2:
+            employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
+        
+        manager_name_parts = new_manager.split()
+        if len(manager_name_parts) > 2:
+            new_manager = f"{manager_name_parts[0]} {manager_name_parts[-1]}"
+        
+        return {
+            'employee_name': employee_name,
+            'employee_id': id_match.group(1).strip(),
+            'effective_date': effective_date,
+            'new_manager': new_manager,
+            'username': sanitize_username(employee_name),
+            'manager_username': sanitize_username(new_manager)
+        }
+    except Exception as e:
+        st.error(f"Error parsing manager change: {str(e)}")
+        return None
+
+def generate_manager_change_script(details: Dict, is_scheduled: bool = False) -> str:
+    """Generate PowerShell script for manager change."""
+    if is_scheduled:
+        return f'''# Scheduled manager update for {details['employee_name']}
+$userName = "{details['employee_name']}"
+$managerName = "{details['new_manager']}"
+$targetDate = Get-Date "{details['effective_date'].strftime('%Y-%m-%d')}"
 $today = Get-Date
 
 if ($today -ge $targetDate) {{
-    $user = Get-ADUser -Filter "Name -eq '$userName'" -Properties Title, Department, Description, Office, Manager
-    if ($user) {{
-        $manager = Get-ADUser -Filter "Name -eq '$managerName'"
-        if ($manager) {{
-            Set-ADUser -Identity $user.DistinguishedName `` 
-                -Title $newTitle `` 
-                -Department $newDepartment `` 
-                -Description $newDescription `` 
-                -Office $newOffice `` 
-                -Manager $manager.DistinguishedName
-            Write-Host "✅ Successfully updated job details for $userName." -ForegroundColor Green
+    try {{
+        $user = Get-ADUser -Filter "Name -eq '$userName'" -Properties Manager -ErrorAction Stop
+        
+        if ($user) {{
+            $manager = Get-ADUser -Filter "Name -eq '$managerName'" -ErrorAction Stop
+            
+            if ($manager) {{
+                Set-ADUser -Identity $user.DistinguishedName `
+                    -Manager $manager.DistinguishedName `
+                    -ErrorAction Stop
+                    
+                Write-Host "✅ Updated manager for $userName." -ForegroundColor Green
+            }} else {{
+                Write-Host "❌ Manager '$managerName' not found." -ForegroundColor Red
+            }}
         }} else {{
-            Write-Host "❌ Manager '$managerName' not found." -ForegroundColor Red
+            Write-Host "❌ User '$userName' not found." -ForegroundColor Red
         }}
-    }} else {{
-        Write-Host "❌ User '$userName' not found." -ForegroundColor Red
+    }} catch {{
+        Write-Host "❌ Error: $_" -ForegroundColor Red
     }}
 }} else {{
-$script = @"
-# Immediate update for {employee_name}
-Set-ADUser -Identity "{username}" ``
-    -Title "{new_job_title}" ``
-    -Department "{new_department}" ``
-    -Description "{new_job_title}" ``
-    -Office "{new_department}" ``
-    -Manager "{manager_username}"
-
-Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green
-"@
-$filePath = "$env:USERPROFILE\Documents\{script_filename}"
-$script | Set-Content -Path $filePath -Encoding UTF8
-Write-Host "📁 Script saved to $filePath" -ForegroundColor Cyan
-Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Script will run on the effective date." -ForegroundColor Yellow
+    Write-Host "⏳ Not yet $($targetDate.ToShortDateString()). Current date: $($today.ToShortDateString())" -ForegroundColor Yellow
 }}'''
-
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(ps_logic, language='powershell')
-
-                    escaped_script_path = f"$env:USERPROFILE\Documents\{script_filename}"
-                    task_name = f"Update {employee_name} Job Details"
-                    run_time = effective_date.strftime('%Y-%m-%d 09:00AM')
-
-                    schedule_task_script = f'''# Define script path and schedule time
-$scriptPath = "{escaped_script_path}"
-$taskName = "{task_name}"
-$runDate = Get-Date "{run_time}"
-
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `\"$scriptPath`\""
-$trigger = New-ScheduledTaskTrigger -Once -At $runDate
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
-
-Write-Host "✅ Scheduled task '$taskName' to run on $($runDate.ToString('f'))." -ForegroundColor Green'''
-
-                    st.subheader("Scheduling Task Script")
-                    st.code(schedule_task_script, language='powershell')
-                else:
-                    immediate_script = f'''# Immediate update for {employee_name}
-Set-ADUser -Identity "{username}" ``
-    -Title "{new_job_title}" ``
-    -Department "{new_department}" ``
-    -Description "{new_job_title}" ``
-    -Office "{new_department}" ``
-    -Manager "{manager_username}"
-
-Write-Host "✅ Job update for {employee_name} completed." -ForegroundColor Green'''
-
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(immediate_script, language='powershell')
-            else:
-                st.error("Could not extract necessary details from notification.")
-
-# Section 3: Manager Change Parser
-with st.expander("🔄 Manager Change Parser", expanded=False):
-    manager_change_text = st.text_area("Paste Manager Change Notification here:")
-
-    if st.button("Generate Manager Change PowerShell", key="manager_change"):
-        if not manager_change_text:
-            st.warning("Please paste the manager change notification.")
-        else:
-            emp_match = re.search(r"Employee Name:\s*(.+)", manager_change_text)
-            id_match = re.search(r"Employee ref #\s*(\d+)", manager_change_text)
-            date_match = re.search(r"Change effective from:\s*(\d{2}/\d{2}/\d{4})", manager_change_text)
-            mgr_match = re.search(r"New Manager:\s*(.+)", manager_change_text)
-
-            if emp_match and id_match and date_match and mgr_match:
-                employee_name = emp_match.group(1).strip()
-                employee_id = id_match.group(1).strip()
-                effective_date = datetime.strptime(date_match.group(1), "%d/%m/%Y")
-                new_manager = mgr_match.group(1).strip()
-
-                username = employee_name.replace(" ", ".")
-                manager_username = new_manager.replace(" ", ".")
-                today = datetime.today()
-
-                if effective_date > today:
-                    scheduled_script = f'''# Scheduled manager update for {employee_name}
-$userName = "{employee_name}"
-$managerName = "{new_manager}"
-$targetDate = Get-Date "{effective_date.strftime('%Y-%m-%d')}"
-$today = Get-Date
-
-if ($today -ge $targetDate) {{
-    $user = Get-ADUser -Filter \"Name -eq '$userName'\" -Properties Manager
+    else:
+        return f'''# Immediate manager update for {details['employee_name']}
+try {{
+    $user = Get-ADUser -Filter "SamAccountName -eq '{details['username']}'" -ErrorAction Stop
+    
     if ($user) {{
-        $manager = Get-ADUser -Filter \"Name -eq '$managerName'\"
+        $manager = Get-ADUser -Filter "SamAccountName -eq '{details['manager_username']}'" -ErrorAction Stop
+        
         if ($manager) {{
-            Set-ADUser -Identity $user.DistinguishedName ``
-                -Manager $manager.DistinguishedName
-            Write-Host \"✅ Updated manager for $userName.\" -ForegroundColor Green
+            Set-ADUser -Identity $user.DistinguishedName `
+                -Manager $manager.DistinguishedName `
+                -ErrorAction Stop
+                
+            Write-Host "✅ Updated manager for {details['employee_name']}." -ForegroundColor Green
         }} else {{
-            Write-Host \"❌ Manager '$managerName' not found.\" -ForegroundColor Red
+            Write-Host "❌ Manager not found." -ForegroundColor Red
         }}
     }} else {{
-        Write-Host \"❌ User '$userName' not found.\" -ForegroundColor Red
+        Write-Host "❌ User not found." -ForegroundColor Red
     }}
+}} catch {{
+    Write-Host "❌ Error: $_" -ForegroundColor Red
 }}'''
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(scheduled_script, language='powershell')
 
-                    script_filename = f"Update-{employee_name.replace(' ', '-')}-Manager.ps1"
-                    escaped_script_path = f"$env:USERPROFILE\Documents\{script_filename}"
-                    task_name = f"Update {employee_name} Manager"
-                    run_time = effective_date.strftime('%Y-%m-%d 09:00AM')
+# Section 2: Manager Change Parser
+with st.expander("🔄 Manager Change Parser", expanded=False):
+    st.markdown("""
+    **Instructions:** Paste the manager change notification text below.
+    The parser will extract employee and manager information to generate update scripts.
+    """)
+    
+    manager_change_text = st.text_area(
+        "Paste Manager Change Notification here:",
+        height=200,
+        help="Include Employee Name, Employee ref #, Change effective date, and New Manager",
+        key="manager_change_text"
+    )
 
-                    schedule_task_script = f'''# Define script path and schedule time
-$scriptPath = "{escaped_script_path}"
-$taskName = "{task_name}"
-$runDate = Get-Date "{run_time}"
-
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `\"$scriptPath`\""
-$trigger = New-ScheduledTaskTrigger -Once -At $runDate
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
-
-Write-Host "✅ Scheduled task '$taskName' to run on $($runDate.ToString('f'))." -ForegroundColor Green'''
-                    st.subheader("Scheduling Task Script")
-                    st.code(schedule_task_script, language='powershell')
-
-                else:
-                    immediate_script = f'''# Immediate manager update for {employee_name}
-Set-ADUser -Identity "{username}" ``
-    -Manager "{manager_username}"
-
-Write-Host "✅ Updated manager for {employee_name}." -ForegroundColor Green'''
-
-
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(immediate_script, language='powershell')
-            else:
-                st.error("Could not extract all necessary manager change details.")
-with st.expander("🛑 Leaver Notification Parser", expanded=False):
-    leaver_text = st.text_area("Paste Leaver Notification here:")
-
-    if st.button("Generate Disable User PowerShell", key="disable_user"):
-        if not leaver_text:
-            st.warning("Please paste the leaver notification.")
+    if st.button("🚀 Generate Manager Change Scripts", key="manager_change", type="primary"):
+        if not manager_change_text.strip():
+            st.warning("⚠️ Please paste the manager change notification.")
         else:
-            emp_match = re.search(r"^(.*?) has been made a leaver", leaver_text)
-            id_match = re.search(r"Employee Reference #:\s*(\d+)", leaver_text)
-            date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", leaver_text)
-            mgr_match = re.search(r"Reporting Manager:\s*(.+)", leaver_text)
-
-            if emp_match and id_match and date_match and mgr_match:
-                employee_name = emp_match.group(1).strip()
-                leaving_date = datetime.strptime(date_match.group(1), "%d/%m/%Y")
-                sam_account_name = employee_name.lower().replace(" ", ".")
+            with st.spinner("🔄 Parsing notification..."):
+                details = parse_manager_change_notification(manager_change_text)
+            
+            if not details:
+                st.error("❌ Could not extract manager change details. Please check the notification format.")
+                st.info("""
+                **Expected format:**
+                - Employee Name: [Name]
+                - Employee ref #: [ID]
+                - Change effective from: DD/MM/YYYY
+                - New Manager: [Manager Name]
+                """)
+            else:
                 today = datetime.today()
-                date_string = leaving_date.strftime("%d/%m/%Y")
-                filename_suffix = employee_name.replace(" ", "-")
-                script_filename = f"Disable-{filename_suffix}.ps1"
-                ou_path = "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com"
-                description_suffix = f"Leaving Date: {date_string}"
+                is_future = details['effective_date'] > today
+                
+                st.success("✅ Successfully parsed manager change notification!")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Employee", details['employee_name'])
+                    st.metric("Employee ID", details['employee_id'])
+                with col2:
+                    st.metric("New Manager", details['new_manager'])
+                    st.metric("Effective Date", details['effective_date'].strftime('%d/%m/%Y'))
+                
+                st.markdown("---")
+                
+                script_filename = f"Update-{details['employee_name'].replace(' ', '-')}-Manager.ps1"
+                manager_script = generate_manager_change_script(details, is_scheduled=is_future)
+                
+                if is_future:
+                    days_until = (details['effective_date'] - today).days
+                    st.info(f"📅 This change is scheduled for the future ({days_until} days from now)")
+                    
+                    display_script_with_download(
+                        manager_script,
+                        "📄 Manager Update PowerShell Script",
+                        script_filename
+                    )
+                    
+                    st.markdown("---")
+                    
+                    task_name = f"Update {details['employee_name']} Manager"
+                    run_time = details['effective_date'].strftime(f'%Y-%m-%d {DEFAULT_TASK_TIME}')
+                    schedule_script = generate_scheduled_task_script(script_filename, task_name, run_time)
+                    
+                    display_script_with_download(
+                        schedule_script,
+                        "⏰ Task Scheduler Script",
+                        f"Schedule-{details['employee_name'].replace(' ', '-')}-Manager.ps1"
+                    )
+                else:
+                    st.info("⚡ This change is effective immediately")
+                    display_script_with_download(
+                        manager_script,
+                        "📄 Immediate Manager Update Script",
+                        script_filename
+                    )
 
-                ps_script_content = rf"""$samAccountName = "{sam_account_name}"
+# ============================================================================
+# LEAVER NOTIFICATION PARSER
+# ============================================================================
+
+def parse_leaver_notification(text: str) -> Optional[Dict]:
+    """Parse leaver notification and extract details."""
+    try:
+        emp_match = re.search(r"^(.*?) has been made a leaver", text)
+        id_match = re.search(r"Employee Reference #:\s*(\d+)", text)
+        date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", text)
+        mgr_match = re.search(r"Reporting Manager:\s*(.+)", text)
+
+        if not all([emp_match, id_match, date_match, mgr_match]):
+            return None
+
+        leaving_date = validate_date_format(date_match.group(1))
+        if not leaving_date:
+            return None
+
+        employee_name = emp_match.group(1).strip()
+        
+        # Extract first and last name only (ignore middle names)
+        employee_name_parts = employee_name.split()
+        if len(employee_name_parts) > 2:
+            employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
+        
+        return {
+            'employee_name': employee_name,
+            'employee_id': id_match.group(1).strip(),
+            'leaving_date': leaving_date,
+            'manager': mgr_match.group(1).strip(),
+            'sam_account_name': sanitize_username(employee_name)
+        }
+    except Exception as e:
+        st.error(f"Error parsing leaver notification: {str(e)}")
+        return None
+
+def generate_disable_user_script(details: Dict) -> str:
+    """Generate PowerShell script to disable user account."""
+    date_string = details['leaving_date'].strftime("%d/%m/%Y")
+    description_suffix = f"Leaving Date: {date_string}"
+    
+    return rf"""# Disable user account for {details['employee_name']}
+$samAccountName = "{details['sam_account_name']}"
+$ouPath = "{AD_DISABLED_OU}"
+$leavingNote = "{description_suffix}"
 
 try {{
-    $user = Get-ADUser -Identity $samAccountName -Properties Description, DistinguishedName
+    # Get the user account
+    $user = Get-ADUser -Identity $samAccountName -Properties Description, DistinguishedName -ErrorAction Stop
 
     if ($user) {{
+        Write-Host "Found user: $($user.Name)" -ForegroundColor Cyan
+        
+        # Update description with leaving date
         $existingDesc = $user.Description
-        $leavingNote = "{description_suffix}"
-
         if ([string]::IsNullOrWhiteSpace($existingDesc)) {{
             $updatedDesc = $leavingNote
         }} else {{
             $updatedDesc = "$existingDesc - $leavingNote"
         }}
-
-        Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc
-        Set-ADUser -Identity $user.DistinguishedName -Enabled $false
-        Move-ADObject -Identity $user.DistinguishedName -TargetPath "{ou_path}"
-
-        Write-Host "✅ User '$samAccountName' disabled and moved." -ForegroundColor Green
+        
+        # Disable the account
+        Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc -ErrorAction Stop
+        Write-Host "✅ Updated description" -ForegroundColor Green
+        
+        Set-ADUser -Identity $user.DistinguishedName -Enabled $false -ErrorAction Stop
+        Write-Host "✅ Account disabled" -ForegroundColor Green
+        
+        # Move to disabled OU
+        Move-ADObject -Identity $user.DistinguishedName -TargetPath $ouPath -ErrorAction Stop
+        Write-Host "✅ Moved to disabled OU" -ForegroundColor Green
+        
+        Write-Host "`n✅ User '$samAccountName' has been successfully disabled and moved." -ForegroundColor Green
+    }} else {{
+        Write-Host "❌ User not found." -ForegroundColor Red
     }}
-}}
-catch {{
-    Write-Host "❌ User '$samAccountName' not found or an error occurred." -ForegroundColor Red
+}} catch {{
+    Write-Host "❌ Error processing user '$samAccountName'" -ForegroundColor Red
     Write-Host "Error details: $_" -ForegroundColor DarkRed
 }}"""
 
-                if leaving_date > today:
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(ps_script_content, language='powershell')
+with st.expander("🛑 Leaver Notification Parser", expanded=False):
+    st.markdown("""
+    **Instructions:** Paste the leaver notification text below.
+    This will generate a script to disable the account and move it to the appropriate OU.
+    """)
+    
+    leaver_text = st.text_area(
+        "Paste Leaver Notification here:",
+        height=200,
+        help="Include employee name, reference #, leaving date, and reporting manager",
+        key="leaver_text"
+    )
 
+    if st.button("🚀 Generate Disable User Script", key="disable_user", type="primary"):
+        if not leaver_text.strip():
+            st.warning("⚠️ Please paste the leaver notification.")
+        else:
+            with st.spinner("🔄 Parsing notification..."):
+                details = parse_leaver_notification(leaver_text)
+            
+            if not details:
+                st.error("❌ Could not extract leaver details. Please check the notification format.")
+                st.info("""
+                **Expected format:**
+                - [Name] has been made a leaver
+                - Employee Reference #: [ID]
+                - Leaving Date: DD/MM/YYYY
+                - Reporting Manager: [Manager Name]
+                """)
+            else:
+                today = datetime.today()
+                is_future = details['leaving_date'] > today
+                
+                st.success("✅ Successfully parsed leaver notification!")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Employee", details['employee_name'])
+                    st.metric("Employee ID", details['employee_id'])
+                with col2:
+                    st.metric("Leaving Date", details['leaving_date'].strftime('%d/%m/%Y'))
+                    st.metric("Manager", details['manager'])
+                
+                st.markdown("---")
+                
+                script_filename = f"Disable-{details['employee_name'].replace(' ', '-')}.ps1"
+                disable_script = generate_disable_user_script(details)
+                
+                if is_future:
+                    days_until = (details['leaving_date'] - today).days
+                    st.info(f"📅 Account will be disabled in {days_until} days")
+                    
+                    display_script_with_download(
+                        disable_script,
+                        "📄 Disable User PowerShell Script",
+                        script_filename
+                    )
+                    
+                    st.markdown("---")
+                    
+                    # Generate scheduler script
+                    task_name = f"Disable {details['employee_name']} Account"
+                    run_time = details['leaving_date'].strftime(f'%Y-%m-%d {LEAVER_TASK_TIME}')
+                    
                     schedule_script = rf"""# Save script and schedule for future execution
 $scriptContent = @"
-{ps_script_content}
+{disable_script}
 "@
 
 $scriptPath = "$env:USERPROFILE\Documents\{script_filename}"
 $scriptContent | Set-Content -Path $scriptPath -Encoding UTF8
+Write-Host "📁 Script saved to: $scriptPath" -ForegroundColor Cyan
 
-$taskName = "Disable {employee_name} Account"
-$runDate = Get-Date "{leaving_date.strftime('%Y-%m-%d')} 20:00"
+$taskName = "{task_name}"
+$runDate = Get-Date "{run_time}"
 
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$scriptPath`""
-$trigger = New-ScheduledTaskTrigger -Once -At $runDate
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force
-
-Write-Host "✅ Scheduled disable task for {employee_name} on $($runDate.ToString('f'))" -ForegroundColor Green"""
-
-                    st.subheader("Task Scheduler Script")
-                    st.code(schedule_script, language='powershell')
-
+try {{
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$scriptPath`""
+    $trigger = New-ScheduledTaskTrigger -Once -At $runDate
+    
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Force -ErrorAction Stop
+    
+    Write-Host "✅ Scheduled disable task for {details['employee_name']}" -ForegroundColor Green
+    Write-Host "📅 Task will run on: $($runDate.ToString('f'))" -ForegroundColor Cyan
+}} catch {{
+    Write-Host "❌ Error creating scheduled task: $_" -ForegroundColor Red
+}}"""
+                    
+                    display_script_with_download(
+                        schedule_script,
+                        "⏰ Task Scheduler Script",
+                        f"Schedule-Disable-{details['employee_name'].replace(' ', '-')}.ps1"
+                    )
+                    
+                    st.warning("⚠️ **Important:** The scheduler script will automatically save the disable script and create the scheduled task.")
                 else:
-                    st.subheader("PowerShell Script (.ps1) Content")
-                    st.code(ps_script_content, language='powershell')
+                    st.warning("⚠️ This employee's leaving date is today or in the past. Execute immediately!")
+                    display_script_with_download(
+                        disable_script,
+                        "📄 Immediate Disable User Script",
+                        script_filename
+                    )
 
-            else:
-                st.error("Could not extract all necessary leaver details.")
-# ------------------------------
-# Section 4: m1
-# ------------------------------
+# ============================================================================
+# M1 NEW EMPLOYEE ONBOARDING
+# ============================================================================
 
-import streamlit as st
-import re
-import secrets
-import string
-
-def parse_m1(text):
+def parse_m1(text: str) -> Dict[str, str]:
+    """
+    Parse M1 formatted text into a dictionary.
+    Handles both colon-separated and tab-separated key-value pairs.
+    """
     data = {}
     lines = text.strip().split('\n')
+    
     for line in lines:
-        if line.strip() == '':
+        line = line.strip()
+        if not line:
             continue
+            
         if ':' in line:
             key, value = line.split(':', 1)
-            key = key.strip()
-            value = value.strip()
-            data[key] = value
+            data[key.strip()] = value.strip()
         elif '\t' in line:
-            key_value = line.split('\t')
-            key = key_value[0].strip()
-            value = key_value[-1].strip()
-            data[key] = value
-        else:
-            pass
+            parts = line.split('\t')
+            if len(parts) >= 2:
+                data[parts[0].strip()] = parts[-1].strip()
+    
     return data
 
-def capitalize_name(name):
-    return " ".join(word.capitalize() for word in name.split())
-
-def generate_password_from_name(first_name, last_name):
+def generate_password_from_name(first_name: str, last_name: str) -> str:
+    """
+    Generate a standardized password from employee name.
+    Format: First 3 letters + Last 3 letters + #24
+    """
+    if not first_name or not last_name:
+        return generate_secure_password()
+    
     first_part = first_name.lower()[:3]
     last_part = last_name.lower()[:3]
     password = generate_password_from_env()
     return password.capitalize()
 
-def generate_message(data):
-    manager_name = capitalize_name(data.get("Hiring Manager Name", ""))
-    name = capitalize_name(data.get("Candidate Name", ""))
-    job_title = data.get("candidate Job Title", "") or data.get("Candidate Job Title", "")
-    location = data.get("Location", "")
-    telephone = data.get("Candidate Mobile Number", "")
-    address = data.get("Candidate Address", "")
-    company_name = data.get("Company Name", "")
-    start_date = data.get("Start Date", "")
+def generate_onboarding_details(data: Dict[str, str]) -> Dict:
+    """Generate comprehensive onboarding details from M1 data."""
+    try:
+        # Extract and capitalize names
+        manager_name = capitalize_name(data.get("Hiring Manager Name", ""))
+        candidate_name = capitalize_name(data.get("Candidate Name", ""))
+        job_title = data.get("candidate Job Title", "") or data.get("Candidate Job Title", "")
+        location = data.get("Location", "")
+        telephone = data.get("Candidate Mobile Number", "")
+        address = data.get("Candidate Address", "")
+        company_name = data.get("Company Name", "")
+        start_date = data.get("Start Date", "")
+        candidate_id = data.get('Unique Identifier - Candidate ID', '')
 
-    names = name.split()
-    first_name = names[0] if names else ""
-    last_name = names[-1] if names else ""
+        # Parse names
+        name_parts = candidate_name.split()
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[-1] if len(name_parts) > 1 else ""
 
-    username = f"{first_name.lower()}.{last_name.lower()}"
-    default_password = generate_password_from_name(first_name, last_name)
-    spectra_pm_password = SPECTRA_DEFAULT_PASSWORD
+        # Generate credentials
+        username = sanitize_username(candidate_name)
+        default_password = generate_password_from_name(first_name, last_name)
+        spectra_pm_username = f"{first_name.lower()}{last_name[0].lower()}super" if last_name else ""
+        spectra_pm_password = SPECTRA_DEFAULT_PASSWORD if len(first_name) >= 2 and len(last_name) >= 2 else generate_secure_password()
 
-    manager_parts = manager_name.split()
-    manager_username = f"{manager_parts[0].lower()}.{manager_parts[-1].lower()}" if len(manager_parts) >= 2 else manager_parts[0].lower()
+        # Manager username
+        manager_parts = manager_name.split()
+        manager_username = sanitize_username(manager_name) if len(manager_parts) >= 2 else manager_parts[0].lower() if manager_parts else ""
 
-    permissions = []
-    if data.get("Access Permissions for XRM", "").lower() != "no" and data.get("Access Permissions for XRM", "").strip():
-        permissions.append("XRM")
-    if data.get("Access to Standard Applications - Iris", "").lower() != "no" and data.get("Access to Standard Applications - Iris", "").strip():
-        permissions.append("IRIS")
+        # Determine permissions
+        permissions = []
+        if data.get("Access Permissions for XRM", "").lower() not in ["no", ""] and data.get("Access Permissions for XRM", "").strip():
+            permissions.append("XRM")
+        if data.get("Access to Standard Applications - Iris", "").lower() not in ["no", ""] and data.get("Access to Standard Applications - Iris", "").strip():
+            permissions.append("IRIS")
 
-    ad_create_script = ""
-    ad_update_script = ""
+        # Determine company and generate appropriate scripts
+        company_reg = data.get("Company Registered Number", "")
+        
+        if "Health Intelligence" in company_reg:
+            config = COMPANY_CONFIGS["Health Intelligence"]
+            user_email = f"{username}{config['email_domain']}"
+            company_display = config['display_name']
+            
+            # Build AD create script with only non-empty fields
+            ad_params = []
+            ad_params.append(f'-Name "{candidate_name}"')
+            ad_params.append(f'-SamAccountName "{username}"')
+            if first_name:
+                ad_params.append(f'-GivenName "{first_name}"')
+            if last_name:
+                ad_params.append(f'-Surname "{last_name}"')
+            ad_params.append(f'-DisplayName "{candidate_name}"')
+            if job_title:
+                ad_params.append(f'-Description "{job_title}"')
+                ad_params.append(f'-Title "{job_title}"')
+            if company_name:
+                ad_params.append(f'-Department "{company_name}"')
+            if location:
+                ad_params.append(f'-Office "{location}"')
+            if user_email:
+                ad_params.append(f'-EmailAddress "{user_email}"')
+            ad_params.append(f'-Path "{config["ad_path"]}"')
+            ad_params.append(f'-Company "{company_display}"')
+            if manager_username:
+                ad_params.append(f'-Manager "{manager_username}"')
+            ad_params.append(f'-AccountPassword (ConvertTo-SecureString "{default_password}" -AsPlainText -Force)')
+            if candidate_id:
+                ad_params.append(f'-employeeNumber "{candidate_id}"')
+            ad_params.append('-Enabled $true')
+            ad_params.append('-ErrorAction Stop')
+            
+            ad_params_str = ' `\n            '.join(ad_params)
+            
+            ad_create_script = f"""# Create new AD user for {candidate_name}
+try {{
+    if (-not (Get-ADUser -Filter {{SamAccountName -eq '{username}'}} -ErrorAction SilentlyContinue)) {{
+        New-ADUser {ad_params_str}
+        Write-Host "✅ User {username} created successfully." -ForegroundColor Green
+    }} else {{
+        Write-Host "⚠️ User {username} already exists." -ForegroundColor Yellow
+    }}
+}} catch {{
+    Write-Host "❌ Error creating user: $_" -ForegroundColor Red
+}}"""
+            
+            sections = config['sections']
+        elif "TAC Healthcare" in company_reg:
+            config = COMPANY_CONFIGS["TAC Healthcare"]
+            user_email = f"{username}{config['email_domain']}"
+            company_display = config['display_name']
+            ad_create_script = ""
+            sections = config['sections']
+        else:
+            config = COMPANY_CONFIGS["InHealth Group"]
+            user_email = f"{username}{config['email_domain']}"
+            company_display = config['display_name']
+            ad_create_script = ""
+            sections = config['sections']
 
-    if "Health Intelligence" in data.get("Company Registered Number", ""):
-        user_email = f"{username}@inhealthgroup.com"
-        company_display = "Health Intelligence"
-        ad_create_script = f"""```powershell
-if (-not (Get-ADUser -Filter {{SamAccountName -eq '{username}'}})) {{
-    New-ADUser -Name \"{name}\" `
-        -SamAccountName \"{username}\" `
-        -GivenName \"{first_name}\" `
-        -Surname \"{last_name}\" `
-        -DisplayName \"{name}\" `
-        -Description \"{job_title}\" `
-        -Title \"{job_title}\" `
-        -Department \"{company_name}\" `
-        -Office \"{location}\" `
-        -EmailAddress \"{username}@inhealthgroup.com\" `
-        -Path \"OU=AHW DESP,OU=HIUsers,DC=hi,DC=int\" `
-        -Company \"Health-Intelligence\" `
-        -Manager \"{manager_username}\" `
-        -AccountPassword (ConvertTo-SecureString \"{default_password}\" -AsPlainText -Force) `
-        -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-        -Enabled $true
-}} else {{ Write-Host \"User {username} already exists.\" }}
-```
-```"""
-        ad_update_script = f"""```powershell
-Set-ADUser -Identity \"{username}\" `
-    -Title \"{job_title}\" `
-    -Department \"{company_name}\" `
-    -Manager \"{manager_username}\" `
-    -Description \"{job_title}\" `
-    -Office \"{location}\" `
-    -EmailAddress \"{username}@inhealthgroup.com\" `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-    -Company \"Inhealthgroup\"
-```"""
-        sections = [
-            "VPN Account", 
-            "Office 365 Account", 
-            "Ad Account",            
-            "Spectra PM", 
-            "8x8 VCC Account"
-        ]
-    elif "TAC Healthcare" in data.get("Company Registered Number", ""):
-        user_email = f"{username}@tachealthcare.com"
-        company_display = "TAC Healthcare"
-        ad_update_script = f"""```powershell
-Set-ADUser -Identity \"{username}\" `
-    -Title \"{job_title}\" `
-    -Department \"{company_name}\" `
-    -Manager \"{manager_username}\" `
-    -Description \"{job_title}\" `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-    -Office \"{location}\" `
-    -EmailAddress \"{username}@tachealthcare.com\" `
-    -Company \"{company_display}\"
-```"""
-        sections = ["Office 365 Account", "Ad Account"]
-    else:
-        user_email = f"{username}@inhealthgroup.com"
-        company_display = "InHealth Group"
-        ad_update_script = f"""```powershell
-Set-ADUser -Identity \"{username}\" `
-    -Title \"{job_title}\" `
-    -Department \"{company_name}\" `
-    -Manager \"{manager_username}\" `
-    -Description \"{job_title}\" `
-    -Office \"{location}\" `
-    -employeeNumber \"{data.get('Unique Identifier - Candidate ID', '')}\" `
-    -EmailAddress \"{username}@inhealthgroup.com\" `
-    -Company \"{company_display}\"
-```"""
-        sections = ["Office 365 Account", "Ad Account"]
+        # AD update script (common for all) - only include non-empty fields
+        update_params = []
+        if job_title:
+            update_params.append(f'-Title "{job_title}"')
+        if company_name:
+            update_params.append(f'-Department "{company_name}"')
+        if manager_username:
+            update_params.append(f'-Manager "{manager_username}"')
+        if job_title:
+            update_params.append(f'-Description "{job_title}"')
+        if location:
+            update_params.append(f'-Office "{location}"')
+        if user_email:
+            update_params.append(f'-EmailAddress "{user_email}"')
+        if candidate_id:
+            update_params.append(f'-employeeNumber "{candidate_id}"')
+        if company_display:
+            update_params.append(f'-Company "{company_display}"')
+        update_params.append('-ErrorAction Stop')
+        
+        update_params_str = ' `\n        '.join(update_params)
+        
+        ad_update_script = f"""# Update AD user attributes for {candidate_name}
+try {{
+    Set-ADUser -Identity "{username}" `
+        {update_params_str}
+    Write-Host "✅ User attributes updated successfully." -ForegroundColor Green
+}} catch {{
+    Write-Host "❌ Error updating user: $_" -ForegroundColor Red
+}}"""
 
-    if permissions:
-        sections.append("Permissions")
+        if permissions:
+            sections = sections + ["Permissions"]
 
-    article = "an" if job_title and job_title[0].lower() in 'aeiou' else "a"
+        # Generate messages
+        manager_first_name = manager_name.split()[0] if manager_name else "Manager"
+        
+        # Build the joining info line with conditional fields
+        if job_title and start_date:
+            article = "an" if job_title[0].lower() in 'aeiou' else "a"
+            joining_info = f"the new starter, {candidate_name}, who will be joining as {article} {job_title} on {start_date}"
+        elif job_title:
+            article = "an" if job_title[0].lower() in 'aeiou' else "a"
+            joining_info = f"the new starter, {candidate_name}, who will be joining as {article} {job_title}"
+        elif start_date:
+            joining_info = f"the new starter, {candidate_name}, who will be starting on {start_date}"
+        else:
+            joining_info = f"the new starter, {candidate_name}"
+        
+        # Build manager message with conditional Spectra PM password for Health Intelligence
+        base_message = f"""Hello {manager_first_name},
 
-    message_to_send_manager = f"""Hello {manager_name.split()[0]},
-
-Please find the login details for the new starter, {name}, who will be joining as {article} {job_title} on {start_date}.
+Please find the login details for {joining_info}.
 
 Username: {username}
 User Email: {user_email}
-Password: {default_password}
+Password: {default_password}"""
 
-# Spectra PM Username: {first_name.lower()}{last_name[0].lower()}super
-# Spectra PM Password: {spectra_pm_password}
+        # Add Spectra PM password for Health Intelligence
+        if "Health" in company_display and "Intelligence" in company_display:
+            base_message += f"""
 
-Best regards,
-Your IT Team"""
+Spectra PM Username: {spectra_pm_username}
+Spectra PM Password: {spectra_pm_password}"""
+        
+        message_to_manager = base_message
 
-    jira_reply = f"""Hello {manager_name.split()[0]},
+        jira_reply = f"""Hello {manager_first_name},
 
-An account for {name} has been created, and the account details have been sent to you via Teams.
+An account for {candidate_name} has been created, and the account details have been sent to you via Teams."""
 
-Best regards,
-Your IT Team"""
+        return {
+            "First Name": first_name,
+            "Last Name": last_name,
+            "Full Name": candidate_name,
+            "Username": username,
+            "Password": default_password,
+            "User Email": user_email,
+            "Job Title": job_title,
+            "Description": job_title,
+            "Department": company_name,
+            "Office": location,
+            "Company": company_display,
+            "Manager": manager_name,
+            "Manager Username": manager_username,
+            "Mobile": telephone,
+            "Address": address,
+            "Employee ID": candidate_id,
+            "Spectra PM Username": spectra_pm_username,
+            "Spectra PM Password": spectra_pm_password,
+            "Spectra PM Organization": "O0 - InHealth Intelligence Ltd",
+            "NHS Email": "nomail@nhs.net",
+            "Permissions": ", ".join(permissions) if permissions else "None",
+            "AD Create Script": ad_create_script,
+            "AD Update Script": ad_update_script,
+            "Message to Manager": message_to_manager,
+            "Jira Reply": jira_reply,
+            "Sections": sections
+        }
+    except Exception as e:
+        st.error(f"Error generating onboarding details: {str(e)}")
+        return None
 
-    return {
-        "Candidates First Name": first_name,
-        "Candidates Last Name": last_name,
-        "Username": username,
-        "Password": default_password,
-        "Candidate's Full Name": name,
-        "Description": job_title,
-        "Office": location,
-        "Job Title": job_title,
-        "Company": company_display,
-        "Manager": manager_name,
-        "PowerShell script to Update the attributes create": ad_create_script,
-        "PowerShell script to Update the attributes update": ad_update_script,
-        "Mobile": telephone,
-        "Address": address,
-        "User Email": user_email,
-        "Department": company_name,
-        "Spectra PM Username": f"{first_name.lower()}{last_name[0].lower()}super",
-        "Users Organization": "O0 - InHealth Intelligence Ltd",
-        "Spectra PM Password": spectra_pm_password,
-        "NHS Email": "nomail@nhs.net",
-        "Permissions": ", ".join(permissions),
-        "Message to Send Manager": message_to_send_manager,
-        "Jira Reply": jira_reply,
-        "Sections": sections
-    }
+with st.expander("👤 M1 New Employee Onboarding", expanded=False):
+    st.markdown("""
+    **Instructions:** Paste your M1 formatted data below to generate complete onboarding details
+    including account credentials, PowerShell scripts, and communication templates.
+    """)
 
-def main():
-    st.title("M1 to User Onboarding Details Generator")
+    m1_input = st.text_area(
+        "Paste M1 Input Data:",
+        height=300,
+        help="Paste the complete M1 formatted employee data",
+        key="m1_input"
+    )
 
-    st.write("Paste your M1 formatted data below:")
-    m1_input = st.text_area("M1 Input", height=400)
-
-    if st.button("Convert and Generate Details"):
-        if m1_input.strip():
-            data = parse_m1(m1_input)
-            generated_data = generate_message(data)
-            sections = generated_data["Sections"]
-
-            for section in sections:
-                with st.expander(section, expanded=False):
-                    keys_to_display = []
-                    if section == "Office 365 Account":
-                        keys_to_display = [
-                            "Candidates First Name", "Candidates Last Name", "Username", "Password", "Candidate's Full Name", "Job Title"
-                        ]
-                    elif section == "Ad Account":
-                        keys_to_display = [
-                            "Candidate's Full Name", "Description", "Office", "Job Title", "Department", "Company",
-                            "Manager", "PowerShell script to Update the attributes update", "User Email"
-                        ]
-                        if generated_data.get("PowerShell script to Update the attributes create"):
-                            keys_to_display.insert(7, "PowerShell script to Update the attributes create")
-                    elif section == "VPN Account":
-                        keys_to_display = [
-                            "Candidates First Name", "Candidates Last Name", "Username", "Password", 
-                            "Candidate's Full Name", "Description", "Office", "Job Title", "Company", 
-                            "Manager", "User Email"
-                        ]
-                    elif section == "Spectra PM":
-                        keys_to_display = [
-                            "Candidates First Name", "Candidates Last Name", "Spectra PM Username", "Users Organization", "Spectra PM Password", "NHS Email"
-                        ]
-                    elif section == "8x8 VCC Account":
-                        keys_to_display = [
-                            "Candidates First Name", "Candidates Last Name", "Username", "Job Title", "Department", "User Email", "Office"
-                        ]
-                    elif section == "Permissions":
-                        keys_to_display = ["Permissions"]
-
-                    for key in keys_to_display:
-                        if key in generated_data:
-                            st.markdown(f"**{key} :**")
-                            if "PowerShell script to Update the attributes" in key:
-                                st.markdown(generated_data[key])
-                            else:
-                                st.code(generated_data[key], language='plaintext')
-
-            st.markdown("### Manager")
-            st.code(generated_data["Manager"], language='plaintext')
-
-            st.markdown("### Message to Send Manager")
-            st.code(generated_data["Message to Send Manager"], language='plaintext')
-
-            st.markdown("### Jira Reply")
-            st.code(generated_data["Jira Reply"], language='plaintext')
+    if st.button("🚀 Generate Onboarding Details", key="m1_generate", type="primary"):
+        if not m1_input.strip():
+            st.warning("⚠️ Please paste M1 data before generating.")
         else:
-            st.error("Please enter the required details")
+            with st.spinner("🔄 Processing M1 data..."):
+                m1_data = parse_m1(m1_input)
+                if m1_data:
+                    onboarding_details = generate_onboarding_details(m1_data)
+                else:
+                    onboarding_details = None
+            
+            if not onboarding_details:
+                st.error("❌ Could not generate onboarding details. Please check the M1 data format.")
+            else:
+                st.success("✅ Successfully generated onboarding details!")
+                
+                # Display summary
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Employee", onboarding_details["Full Name"])
+                    st.metric("Username", onboarding_details["Username"])
+                with col2:
+                    st.metric("Job Title", onboarding_details["Job Title"])
+                    st.metric("Company", onboarding_details["Company"])
+                with col3:
+                    st.metric("Manager", onboarding_details["Manager"])
+                    st.metric("Email", onboarding_details["User Email"])
+                
+                st.markdown("---")
+                
+                # Display sections
+                sections = onboarding_details["Sections"]
+                
+                for section in sections:
+                    with st.expander(f"📋 {section}", expanded=False):
+                        if section == "Office 365 Account":
+                            st.markdown("**Account Details:**")
+                            
+                            # Display each field separately for easy copying
+                            col1, col2 = st.columns([1, 3])
+                            
+                            with col1:
+                                st.markdown("**First Name:**")
+                            with col2:
+                                st.code(onboarding_details["First Name"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Last Name:**")
+                            with col2:
+                                st.code(onboarding_details["Last Name"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Username:**")
+                            with col2:
+                                st.code(onboarding_details["Username"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Password:**")
+                            with col2:
+                                st.code(onboarding_details["Password"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Full Name:**")
+                            with col2:
+                                st.code(onboarding_details["Full Name"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Job Title:**")
+                            with col2:
+                                st.code(onboarding_details["Job Title"], language='text')
+                        
+                        elif section == "Ad Account":
+                            st.markdown("**Active Directory Details:**")
+                            st.code(f"""Full Name: {onboarding_details["Full Name"]}
+Description: {onboarding_details["Description"]}
+Office: {onboarding_details["Office"]}
+Job Title: {onboarding_details["Job Title"]}
+Department: {onboarding_details["Department"]}
+Company: {onboarding_details["Company"]}""", language='text')
+                            
+                            # Display only email and manager as individually copyable fields
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**Manager:**")
+                            with col2:
+                                st.code(onboarding_details["Manager"], language='text')
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.markdown("**User Email:**")
+                            with col2:
+                                st.code(onboarding_details["User Email"], language='text')
+                            
+                            if onboarding_details["AD Create Script"]:
+                                st.markdown("**PowerShell Create Script:**")
+                                st.code(onboarding_details["AD Create Script"], language='powershell')
+                                create_download_button(
+                                    onboarding_details["AD Create Script"],
+                                    f"Create-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                    "Download Create Script"
+                                )
+                            
+                            st.markdown("**PowerShell Update Script:**")
+                            st.code(onboarding_details["AD Update Script"], language='powershell')
+                            create_download_button(
+                                onboarding_details["AD Update Script"],
+                                f"Update-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                "Download Update Script"
+                            )
+                        
+                        elif section == "VPN Account":
+                            st.markdown("**VPN Account Details:**")
+                            
+                            # Display each field separately for easy copying
+                            for field_name, field_key in [
+                                ("First Name", "First Name"),
+                                ("Last Name", "Last Name"),
+                                ("Username", "Username"),
+                                ("Password", "Password"),
+                                ("Full Name", "Full Name"),
+                                ("Description", "Description"),
+                                ("Office", "Office"),
+                                ("Job Title", "Job Title"),
+                                ("Company", "Company"),
+                                ("Manager", "Manager"),
+                                ("User Email", "User Email")
+                            ]:
+                                col1, col2 = st.columns([1, 3])
+                                with col1:
+                                    st.markdown(f"**{field_name}:**")
+                                with col2:
+                                    st.code(onboarding_details[field_key], language='text')
+                        
+                        elif section == "Spectra PM":
+                            st.markdown("**Spectra PM Account:**")
+                            
+                            # Display each field separately for easy copying
+                            for field_name, field_key in [
+                                ("First Name", "First Name"),
+                                ("Last Name", "Last Name"),
+                                ("Username", "Spectra PM Username"),
+                                ("Organization", "Spectra PM Organization"),
+                                ("Password", "Spectra PM Password"),
+                                ("NHS Email", "NHS Email")
+                            ]:
+                                col1, col2 = st.columns([1, 3])
+                                with col1:
+                                    st.markdown(f"**{field_name}:**")
+                                with col2:
+                                    st.code(onboarding_details[field_key], language='text')
+                        
+                        elif section == "8x8 VCC Account":
+                            st.markdown("**8x8 VCC Account:**")
+                            
+                            # Display each field separately for easy copying
+                            for field_name, field_key in [
+                                ("First Name", "First Name"),
+                                ("Last Name", "Last Name"),
+                                ("Username", "Username"),
+                                ("Job Title", "Job Title"),
+                                ("Department", "Department"),
+                                ("User Email", "User Email"),
+                                ("Office", "Office")
+                            ]:
+                                col1, col2 = st.columns([1, 3])
+                                with col1:
+                                    st.markdown(f"**{field_name}:**")
+                                with col2:
+                                    st.code(onboarding_details[field_key], language='text')
+                        
+                        elif section == "Permissions":
+                            st.markdown("**Access Permissions:**")
+                            st.code(onboarding_details["Permissions"], language='text')
+                
+                # Communication templates
+                st.markdown("---")
+                st.subheader("📧 Communication Templates")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Message to Manager:**")
+                    st.code(onboarding_details["Message to Manager"], language='text')
+                    create_download_button(
+                        onboarding_details["Message to Manager"],
+                        f"Manager-Message-{onboarding_details['Full Name'].replace(' ', '-')}.txt",
+                        "Download Manager Message"
+                    )
+                
+                with col2:
+                    st.markdown("**Jira Reply:**")
+                    st.code(onboarding_details["Jira Reply"], language='text')
+                    create_download_button(
+                        onboarding_details["Jira Reply"],
+                        f"Jira-Reply-{onboarding_details['Full Name'].replace(' ', '-')}.txt",
+                        "Download Jira Reply"
+                    )
 
-if __name__ == "__main__":
-    main()
+# ============================================================================
+# FOOTER
+# ============================================================================
+
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; padding: 2rem;'>
+    <p><strong>Employee Management Toolkit v2.0</strong></p>
+    <p>⚠️ <em>Important: Always review generated scripts before execution</em></p>
+    <p>🔒 <em>Handle credentials securely and follow your organization's security policies</em></p>
+</div>
+""", unsafe_allow_html=True)

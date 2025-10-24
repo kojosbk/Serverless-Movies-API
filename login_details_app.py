@@ -28,21 +28,39 @@ import string
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env file (for local development)
 load_dotenv()
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
 
-# Active Directory Configuration
-AD_DISABLED_OU = os.getenv("AD_DISABLED_OU", "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com")
-AD_HI_USER_PATH = os.getenv("AD_HI_USER_PATH", "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int")
+# Helper function to get config from either .env or Streamlit secrets
+def get_config(key: str, default: str = "") -> str:
+    """Get configuration from environment variables or Streamlit secrets."""
+    # Try environment variable first (from .env)
+    value = os.getenv(key)
+    if value:
+        return value
+    
+    # Try Streamlit secrets (for Streamlit Cloud deployment)
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+    
+    # Return default if neither found
+    return default
 
-# Password Configuration (loaded from environment variables)
-XRM_DEFAULT_PASSWORD = os.getenv("XRM_DEFAULT_PASSWORD", "****")
-SPECTRA_DEFAULT_PASSWORD = os.getenv("SPECTRA_DEFAULT_PASSWORD", "****")
-DEFAULT_PASSWORD_SUFFIX = os.getenv("DEFAULT_PASSWORD_SUFFIX", "#24")
+# Active Directory Configuration
+AD_DISABLED_OU = get_config("AD_DISABLED_OU", "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com")
+AD_HI_USER_PATH = get_config("AD_HI_USER_PATH", "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int")
+
+# Password Configuration (loaded from environment variables or Streamlit secrets)
+XRM_DEFAULT_PASSWORD = get_config("XRM_DEFAULT_PASSWORD", "****")
+SPECTRA_DEFAULT_PASSWORD = get_config("SPECTRA_DEFAULT_PASSWORD", "****")
+DEFAULT_PASSWORD_SUFFIX = get_config("DEFAULT_PASSWORD_SUFFIX", "#24")
 
 # Company Configuration
 COMPANY_CONFIGS = {

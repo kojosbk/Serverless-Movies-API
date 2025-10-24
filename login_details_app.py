@@ -25,14 +25,24 @@ from datetime import datetime
 from typing import Dict, Optional, Tuple, List
 import secrets
 import string
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
 
 # Active Directory Configuration
-AD_DISABLED_OU = "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com"
-AD_HI_USER_PATH = "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int"
+AD_DISABLED_OU = os.getenv("AD_DISABLED_OU", "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com")
+AD_HI_USER_PATH = os.getenv("AD_HI_USER_PATH", "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int")
+
+# Password Configuration (loaded from environment variables)
+XRM_DEFAULT_PASSWORD = os.getenv("XRM_DEFAULT_PASSWORD", "****")
+SPECTRA_DEFAULT_PASSWORD = os.getenv("SPECTRA_DEFAULT_PASSWORD", "****")
+DEFAULT_PASSWORD_SUFFIX = os.getenv("DEFAULT_PASSWORD_SUFFIX", "#24")
 
 # Company Configuration
 COMPANY_CONFIGS = {
@@ -604,7 +614,7 @@ def generate_xrm_messages(employee_name: str) -> Dict[str, str]:
         # Generate messages
         teams_message = f"""Hi {first_name},
 
-Please close the XRM page, reopen it, and use the following password to log in: ****REDACTED****
+Please close the XRM page, reopen it, and use the following password to log in: {XRM_DEFAULT_PASSWORD}
 
 Let me know if you have any issues."""
 
@@ -724,7 +734,7 @@ def generate_spectra_account_details(employee_name: str, account_type: str) -> D
             'last_name': last_name,
             'username': username,
             'nhs_email': 'nomail@nhs.net',
-            'password': '****REDACTED****',
+            'password': SPECTRA_DEFAULT_PASSWORD,
             'account_type': account_type
         }
     except Exception as e:
@@ -1026,14 +1036,14 @@ def parse_m1(text: str) -> Dict[str, str]:
 def generate_password_from_name(first_name: str, last_name: str) -> str:
     """
     Generate a standardized password from employee name.
-    Format: First 3 letters + Last 3 letters + #24
+    Format: First 3 letters + Last 3 letters + suffix from env
     """
     if not first_name or not last_name:
         return generate_secure_password()
     
     first_part = first_name.lower()[:3]
     last_part = last_name.lower()[:3]
-    password = generate_password_from_env()
+    password = f"{first_part}{last_part}{DEFAULT_PASSWORD_SUFFIX}"
     return password.capitalize()
 
 def generate_onboarding_details(data: Dict[str, str]) -> Dict:
@@ -1059,7 +1069,8 @@ def generate_onboarding_details(data: Dict[str, str]) -> Dict:
         username = sanitize_username(candidate_name)
         default_password = generate_password_from_name(first_name, last_name)
         spectra_pm_username = f"{first_name.lower()}{last_name[0].lower()}super" if last_name else ""
-        spectra_pm_password = SPECTRA_DEFAULT_PASSWORD if len(first_name) >= 2 and len(last_name) >= 2 else generate_secure_password()
+        # Use the same Spectra password from environment variables
+        spectra_pm_password = SPECTRA_DEFAULT_PASSWORD
 
         # Manager username
         manager_parts = manager_name.split()

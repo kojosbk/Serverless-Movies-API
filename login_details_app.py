@@ -584,6 +584,234 @@ with st.expander("🔄 Manager Change Parser", expanded=False):
                     )
 
 # ============================================================================
+# XRM ACCOUNT PASSWORD RESETER
+# ============================================================================
+
+def generate_xrm_messages(employee_name: str) -> Dict[str, str]:
+    """Generate XRM password reset messages."""
+    try:
+        # Capitalize the name properly
+        employee_name = capitalize_name(employee_name)
+        
+        # Extract first name
+        name_parts = employee_name.split()
+        first_name = name_parts[0] if name_parts else employee_name
+        
+        # Generate email address (first.lastname@inhealthgroup.com)
+        username = sanitize_username(employee_name)
+        email = f"{username}@inhealthgroup.com"
+        
+        # Generate messages
+        teams_message = f"""Hi {first_name},
+
+Please close the XRM page, reopen it, and use the following password to log in: ****REDACTED****
+
+Let me know if you have any issues."""
+
+        resolving_message = f"""Hi {first_name},
+
+Your account has been unlocked, and the new password has been sent to you on MS Teams. Please check there and let me know if you have any further issues."""
+
+        return {
+            'employee_name': employee_name,
+            'first_name': first_name,
+            'email': email,
+            'teams_message': teams_message,
+            'resolving_message': resolving_message
+        }
+    except Exception as e:
+        st.error(f"Error generating XRM messages: {str(e)}")
+        return None
+
+# Section 3: XRM Account Password Reseter
+with st.expander("🔑 XRM Account Password Reseter", expanded=False):
+    st.markdown("""
+    **Instructions:** Enter the employee's full name to generate password reset messages.
+    The system will create both the Teams message and the resolution message.
+    """)
+    
+    xrm_employee_name = st.text_input(
+        "Employee Full Name:",
+        placeholder="e.g., John Smith",
+        help="Enter the full name of the employee requiring XRM password reset",
+        key="xrm_name_input"
+    )
+
+    if st.button("🚀 Generate XRM Reset Messages", key="xrm_reset", type="primary"):
+        if not xrm_employee_name.strip():
+            st.warning("⚠️ Please enter the employee's name.")
+        else:
+            with st.spinner("🔄 Generating messages..."):
+                messages = generate_xrm_messages(xrm_employee_name)
+            
+            if not messages:
+                st.error("❌ Could not generate messages. Please try again.")
+            else:
+                st.success(f"✅ Successfully generated XRM reset messages for {messages['employee_name']}!")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Employee", messages['employee_name'])
+                with col2:
+                    st.metric("First Name", messages['first_name'])
+                with col3:
+                    st.metric("Email", messages['email'])
+                
+                st.markdown("---")
+                
+                # Email Address Section
+                st.markdown("### 📧 Employee Email")
+                st.code(messages['email'], language='text')
+                
+                st.markdown("---")
+                
+                # Teams Message
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### 💬 Message to Teams")
+                    st.code(messages['teams_message'], language='text')
+                    create_download_button(
+                        messages['teams_message'],
+                        f"XRM-Teams-Message-{messages['employee_name'].replace(' ', '-')}.txt",
+                        "Download Teams Message"
+                    )
+                
+                with col2:
+                    st.markdown("### ✅ Resolving Message")
+                    st.code(messages['resolving_message'], language='text')
+                    create_download_button(
+                        messages['resolving_message'],
+                        f"XRM-Resolving-Message-{messages['employee_name'].replace(' ', '-')}.txt",
+                        "Download Resolving Message"
+                    )
+                
+                st.markdown("---")
+                
+                # Quick copy section
+                st.markdown("### 📋 Quick Copy")
+                st.info("Click the copy icon in the top-right corner of each code block to copy the message.")
+
+# ============================================================================
+# SPECTRA ACCOUNT CREATOR
+# ============================================================================
+
+def generate_spectra_account_details(employee_name: str, account_type: str) -> Dict[str, str]:
+    """Generate Spectra account details for PM or Client."""
+    try:
+        # Capitalize the name properly
+        employee_name = capitalize_name(employee_name)
+        
+        # Extract first and last names
+        name_parts = employee_name.split()
+        if len(name_parts) < 2:
+            return None
+            
+        first_name = name_parts[0]
+        last_name = name_parts[-1]
+        
+        # Generate username based on account type
+        if account_type == "PM":
+            # Format: firstnamefirstletteroflastnamesuper (e.g., lorrainegsuper)
+            username = f"{first_name.lower()}{last_name[0].lower()}super"
+        else:  # Client
+            # Format: firstletterfirstnamelastname (e.g., lgardener)
+            username = f"{first_name[0].lower()}{last_name.lower()}"
+        
+        return {
+            'employee_name': employee_name,
+            'first_name': first_name,
+            'last_name': last_name,
+            'username': username,
+            'nhs_email': 'nomail@nhs.net',
+            'password': '****REDACTED****',
+            'account_type': account_type
+        }
+    except Exception as e:
+        st.error(f"Error generating Spectra account details: {str(e)}")
+        return None
+
+# Section 4: Spectra Account Creator
+with st.expander("🔧 Spectra Account Creator", expanded=False):
+    st.markdown("""
+    **Instructions:** Select the account type (PM or Client) and enter the employee's full name 
+    to generate Spectra account details.
+    """)
+    
+    # Account type selection
+    account_type = st.radio(
+        "Select Account Type:",
+        options=["PM", "Client"],
+        horizontal=True,
+        key="spectra_account_type"
+    )
+    
+    spectra_employee_name = st.text_input(
+        "Employee Full Name:",
+        placeholder="e.g., Lorraine Gardener",
+        help="Enter the full name of the employee",
+        key="spectra_name_input"
+    )
+
+    if st.button("🚀 Generate Spectra Account Details", key="spectra_create", type="primary"):
+        if not spectra_employee_name.strip():
+            st.warning("⚠️ Please enter the employee's name.")
+        else:
+            with st.spinner("🔄 Generating account details..."):
+                details = generate_spectra_account_details(spectra_employee_name, account_type)
+            
+            if not details:
+                st.error("❌ Could not generate account details. Please ensure you entered a full name (first and last name).")
+            else:
+                st.success(f"✅ Successfully generated Spectra {details['account_type']} account details for {details['employee_name']}!")
+                
+                st.markdown("---")
+                
+                # Display account details in a clean format
+                st.markdown(f"### 📋 Spectra {details['account_type']} Account Details")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**First Name:**")
+                    st.code(details['first_name'], language='text')
+                    
+                    st.markdown("**Last Name:**")
+                    st.code(details['last_name'], language='text')
+                    
+                    st.markdown("**Username:**")
+                    st.code(details['username'], language='text')
+                
+                with col2:
+                    st.markdown("**NHS Email:**")
+                    st.code(details['nhs_email'], language='text')
+                    
+                    st.markdown("**Password:**")
+                    st.code(details['password'], language='text')
+                    
+                    st.markdown("**Account Type:**")
+                    st.code(details['account_type'], language='text')
+                
+                st.markdown("---")
+                
+                # Summary for easy copying
+                st.markdown("### 📄 Complete Account Summary")
+                summary = f"""First Name: {details['first_name']}
+Last Name: {details['last_name']}
+Username: {details['username']}
+NHS Email: {details['nhs_email']}
+Password: {details['password']}
+Account Type: Spectra {details['account_type']}"""
+                
+                st.code(summary, language='text')
+                
+                create_download_button(
+                    summary,
+                    f"Spectra-{details['account_type']}-{details['employee_name'].replace(' ', '-')}.txt",
+                    "Download Account Details"
+                )
+
+# ============================================================================
 # LEAVER NOTIFICATION PARSER
 # ============================================================================
 

@@ -844,8 +844,54 @@ Account Type: Spectra {details['account_type']}"""
 # ============================================================================
 
 def parse_leaver_notification(text: str) -> Optional[Dict]:
-    """Parse leaver notification and extract details."""
+    """
+    Parse leaver notification and extract details.
+    Supports three input formats:
+    1. Full notification text (with all details)
+    2. Just an email address (e.g., john.smith@inhealthgroup.com)
+    3. Just a name (e.g., John Smith)
+    """
     try:
+        text = text.strip()
+        
+        # Check if input is just an email address
+        email_match = re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', text)
+        if email_match:
+            # Extract name from email (firstname.lastname@domain.com)
+            email_parts = text.split('@')[0].split('.')
+            if len(email_parts) >= 2:
+                first_name = email_parts[0].capitalize()
+                last_name = email_parts[-1].capitalize()
+                employee_name = f"{first_name} {last_name}"
+                
+                return {
+                    'employee_name': employee_name,
+                    'employee_id': 'N/A',
+                    'leaving_date': datetime.today(),  # Default to today
+                    'manager': 'N/A',
+                    'sam_account_name': sanitize_username(employee_name),
+                    'input_type': 'email'
+                }
+        
+        # Check if input is just a name (no special notification format)
+        # If it doesn't contain notification keywords, treat it as a plain name
+        if not any(keyword in text.lower() for keyword in ['has been made a leaver', 'employee reference', 'leaving date']):
+            # It's just a plain name
+            employee_name = capitalize_name(text)
+            
+            # Check if it's a valid name (at least first and last name)
+            name_parts = employee_name.split()
+            if len(name_parts) >= 2:
+                return {
+                    'employee_name': employee_name,
+                    'employee_id': 'N/A',
+                    'leaving_date': datetime.today(),  # Default to today
+                    'manager': 'N/A',
+                    'sam_account_name': sanitize_username(employee_name),
+                    'input_type': 'name'
+                }
+        
+        # Try to parse full notification format
         emp_match = re.search(r"^(.*?) has been made a leaver", text)
         id_match = re.search(r"Employee Reference #:\s*(\d+)", text)
         date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", text)
@@ -870,7 +916,8 @@ def parse_leaver_notification(text: str) -> Optional[Dict]:
             'employee_id': id_match.group(1).strip(),
             'leaving_date': leaving_date,
             'manager': mgr_match.group(1).strip(),
-            'sam_account_name': sanitize_username(employee_name)
+            'sam_account_name': sanitize_username(employee_name),
+            'input_type': 'full_notification'
         }
     except Exception as e:
         st.error(f"Error parsing leaver notification: {str(e)}")
@@ -923,38 +970,60 @@ try {{
 
 with st.expander("🛑 Leaver Notification Parser", expanded=False):
     st.markdown("""
-    **Instructions:** Paste the leaver notification text below.
-    This will generate a script to disable the account and move it to the appropriate OU.
+    **Instructions:** Provide employee information in any of these formats:
+    - **Full notification** (with all details)
+    - **Just the name** (e.g., "John Smith")
+    - **Just the email** (e.g., "john.smith@inhealthgroup.com")
+    
+    The system will generate a script to disable the account and move it to the appropriate OU.
     """)
     
     leaver_text = st.text_area(
-        "Paste Leaver Notification here:",
+        "Paste Leaver Notification, Name, or Email:",
         height=200,
-        help="Include employee name, reference #, leaving date, and reporting manager",
+        placeholder="Enter:\n• Full notification text, OR\n• Employee name (e.g., John Smith), OR\n• Employee email (e.g., john.smith@inhealthgroup.com)",
+        help="Accepts full notifications, names, or email addresses",
         key="leaver_text"
     )
 
     if st.button("🚀 Generate Disable User Script", key="disable_user", type="primary"):
         if not leaver_text.strip():
-            st.warning("⚠️ Please paste the leaver notification.")
+            st.warning("⚠️ Please provide employee information (notification, name, or email).")
         else:
-            with st.spinner("🔄 Parsing notification..."):
+            with st.spinner("🔄 Processing information..."):
                 details = parse_leaver_notification(leaver_text)
             
             if not details:
-                st.error("❌ Could not extract leaver details. Please check the notification format.")
+                st.error("❌ Could not extract leaver details. Please check the input format.")
                 st.info("""
-                **Expected format:**
-                - [Name] has been made a leaver
-                - Employee Reference #: [ID]
-                - Leaving Date: DD/MM/YYYY
-                - Reporting Manager: [Manager Name]
+                **Accepted formats:**
+                1. **Full notification:**
+                   - [Name] has been made a leaver
+                   - Employee Reference #: [ID]
+                   - Leaving Date: DD/MM/YYYY
+                   - Reporting Manager: [Manager Name]
+                
+                2. **Just a name:** John Smith
+                
+                3. **Just an email:** john.smith@inhealthgroup.com
                 """)
             else:
                 today = datetime.today()
                 is_future = details['leaving_date'] > today
                 
-                st.success("✅ Successfully parsed leaver notification!")
+                # Show success message with input type indicator
+                input_type_msg = {
+                    'email': 'email address',
+                    'name': 'employee name',
+                    'full_notification': 'notification'
+                }
+                input_type = input_type_msg.get(details.get('input_type', 'full_notification'), 'input')
+                
+                st.success(f"✅ Successfully processed {input_type}!")
+                
+                # Show info if using simplified input (name or email)
+                if details.get('input_type') in ['email', 'name']:
+                    st.info(f"ℹ️ Using today's date as leaving date. Employee ID and Manager set to 'N/A'.")
                 
                 col1, col2 = st.columns(2)
                 with col1:

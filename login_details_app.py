@@ -851,7 +851,6 @@ Please find your Spectra {details['account_type']} account login details below:
 
 Username: {details['username']}
 Password: {details['password']}
-NHS Email: {details['nhs_email']}
 
 Let me know if you have any issues accessing the account."""
 

@@ -632,7 +632,7 @@ def generate_xrm_messages(employee_name: str) -> Dict[str, str]:
         # Generate messages
         teams_message = f"""Hi {first_name},
 
-Hope you're doing well! I've reset your XRM password for you.
+I've reset your XRM password for you.
 
 Please close the XRM page, reopen it, and use the following password to log in: {XRM_DEFAULT_PASSWORD}
 
@@ -855,7 +855,7 @@ Account Type: Spectra {details['account_type']}"""
                 # Generate Teams message
                 teams_message = f"""Hi {details['first_name']},
 
-Hope you're well! Your Spectra {details['account_type']} account has been set up. Here are your login details:
+Your Spectra {details['account_type']} account has been set up. Here are your login details:
 
 Username: {details['username']}
 Password: {details['password']}
@@ -1340,7 +1340,7 @@ try {{
         # Build manager message with conditional Spectra PM password for Health Intelligence
         base_message = f"""Hi {manager_first_name},
 
-Hope you're well! Here are the login details for {joining_info}:
+Here are the login details for {joining_info}:
 
 Username: {username}
 User Email: {user_email}

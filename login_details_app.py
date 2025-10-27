@@ -642,7 +642,7 @@ Thanks"""
 
         resolving_message = f"""Hi {first_name},
 
-Good news! Your account has been unlocked, and I've sent the new password to you on MS Teams.
+Your account has been unlocked, and I've sent the new password to you on MS Teams.
 
 Please check your Teams messages and let me know if you need any further assistance.
 
@@ -1363,7 +1363,7 @@ Thanks"""
 
         jira_reply = f"""Hi {manager_first_name},
 
-Good news! The account for {candidate_name} is all set up. I've sent the login details to you via Teams.
+The account for {candidate_name} is all set up. I've sent the login details to you via Teams.
 
 Please check your Teams messages and let me know if you need anything else.
 

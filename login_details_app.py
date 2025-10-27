@@ -838,6 +838,49 @@ Account Type: Spectra {details['account_type']}"""
                     f"Spectra-{details['account_type']}-{details['employee_name'].replace(' ', '-')}.txt",
                     "Download Account Details"
                 )
+                
+                st.markdown("---")
+                
+                # Communication Templates
+                st.markdown("### 📧 Communication Templates")
+                
+                # Generate Teams message
+                teams_message = f"""Hello {details['first_name']},
+
+Please find your Spectra {details['account_type']} account login details below:
+
+Username: {details['username']}
+Password: {details['password']}
+NHS Email: {details['nhs_email']}
+
+Let me know if you have any issues accessing the account."""
+
+                # Generate Jira reply
+                jira_reply = f"""Hello {details['first_name']},
+
+Your Spectra {details['account_type']} account has been created, and the login details have been sent to you via Teams.
+
+Please check your Teams messages and let me know if you have any issues."""
+
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**💬 Message to Teams:**")
+                    st.code(teams_message, language='text')
+                    create_download_button(
+                        teams_message,
+                        f"Spectra-Teams-Message-{details['employee_name'].replace(' ', '-')}.txt",
+                        "Download Teams Message"
+                    )
+                
+                with col2:
+                    st.markdown("**✅ Jira Reply:**")
+                    st.code(jira_reply, language='text')
+                    create_download_button(
+                        jira_reply,
+                        f"Spectra-Jira-Reply-{details['employee_name'].replace(' ', '-')}.txt",
+                        "Download Jira Reply"
+                    )
 
 # ============================================================================
 # LEAVER NOTIFICATION PARSER

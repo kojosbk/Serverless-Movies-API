@@ -632,13 +632,21 @@ def generate_xrm_messages(employee_name: str) -> Dict[str, str]:
         # Generate messages
         teams_message = f"""Hi {first_name},
 
+Hope you're doing well! I've reset your XRM password for you.
+
 Please close the XRM page, reopen it, and use the following password to log in: {XRM_DEFAULT_PASSWORD}
 
-Let me know if you have any issues."""
+Let me know if you have any issues or need further help!
+
+Thanks"""
 
         resolving_message = f"""Hi {first_name},
 
-Your account has been unlocked, and the new password has been sent to you on MS Teams. Please check there and let me know if you have any further issues."""
+Good news! Your account has been unlocked, and I've sent the new password to you on MS Teams.
+
+Please check your Teams messages and let me know if you need any further assistance.
+
+Thanks!"""
 
         return {
             'employee_name': employee_name,
@@ -845,21 +853,25 @@ Account Type: Spectra {details['account_type']}"""
                 st.markdown("### 📧 Communication Templates")
                 
                 # Generate Teams message
-                teams_message = f"""Hello {details['first_name']},
+                teams_message = f"""Hi {details['first_name']},
 
-Please find your Spectra {details['account_type']} account login details below:
+Hope you're well! Your Spectra {details['account_type']} account has been set up. Here are your login details:
 
 Username: {details['username']}
 Password: {details['password']}
 
-Let me know if you have any issues accessing the account."""
+Feel free to reach out if you have any questions or need help getting started!
+
+Thanks"""
 
                 # Generate Jira reply
-                jira_reply = f"""Hello {details['first_name']},
+                jira_reply = f"""Hi {details['first_name']},
 
-Your Spectra {details['account_type']} account has been created, and the login details have been sent to you via Teams.
+Your Spectra {details['account_type']} account is all set up! I've sent the login details to you via Teams.
 
-Please check your Teams messages and let me know if you have any issues."""
+Please check your Teams messages and let me know if you need any assistance.
+
+Thanks!"""
 
                 col1, col2 = st.columns(2)
                 
@@ -1326,9 +1338,9 @@ try {{
             joining_info = f"the new starter, {candidate_name}"
         
         # Build manager message with conditional Spectra PM password for Health Intelligence
-        base_message = f"""Hello {manager_first_name},
+        base_message = f"""Hi {manager_first_name},
 
-Please find the login details for {joining_info}.
+Hope you're well! Here are the login details for {joining_info}:
 
 Username: {username}
 User Email: {user_email}
@@ -1341,11 +1353,21 @@ Password: {default_password}"""
 Spectra PM Username: {spectra_pm_username}
 Spectra PM Password: {spectra_pm_password}"""
         
+        base_message += """
+
+Let me know if you need any help or have questions!
+
+Thanks"""
+        
         message_to_manager = base_message
 
-        jira_reply = f"""Hello {manager_first_name},
+        jira_reply = f"""Hi {manager_first_name},
 
-An account for {candidate_name} has been created, and the account details have been sent to you via Teams."""
+Good news! The account for {candidate_name} is all set up. I've sent the login details to you via Teams.
+
+Please check your Teams messages and let me know if you need anything else.
+
+Thanks!"""
 
         return {
             "First Name": first_name,

@@ -907,52 +907,94 @@ def parse_leaver_notification(text: str) -> Optional[Dict]:
     """
     try:
         text = text.strip()
-        
-        # Check if input is just an email address
-        email_match = re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', text)
-        if email_match:
-            # Extract name from email (firstname.lastname@domain.com)
-            email_parts = text.split('@')[0].split('.')
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        joined = " ".join(lines)
+        # Try to extract email, name, and date from any line
+        email = None
+        name = None
+        leaving_date = None
+        # 1. Find email
+        for line in lines:
+            m = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', line)
+            if m:
+                email = m.group(0)
+                break
+        # 2. Find date (supports 'leaver from 25th October', 'leaving date: ...', 'from ...', etc.)
+        for line in lines:
+            # Try DD/MM/YYYY
+            m = re.search(r'(\d{1,2}/\d{1,2}/\d{4})', line)
+            if m:
+                leaving_date = validate_date_format(m.group(1))
+                if leaving_date:
+                    break
+            # Try 'from 25th October' or 'leaver from 25th October'
+            m2 = re.search(r'from ([\w\d\s]+)', line, re.IGNORECASE)
+            if m2:
+                # Remove ordinal suffixes (st, nd, rd, th) from day numbers
+                date_str = m2.group(1).strip()
+                date_str = re.sub(r'(\d{1,2})(st|nd|rd|th)', r'\1', date_str, flags=re.IGNORECASE)
+                # Try to parse as date (day + month, assume current year)
+                try:
+                    leaving_date = datetime.strptime(date_str + f" {datetime.today().year}", "%d %B %Y")
+                except Exception:
+                    try:
+                        leaving_date = datetime.strptime(date_str + f" {datetime.today().year}", "%d %b %Y")
+                    except Exception:
+                        continue
+                if leaving_date:
+                    break
+        # 3. Find name (look for ' - leaver', or first line, or from email)
+        for line in lines:
+            m = re.match(r'^(.*?)(?:\s*-\s*leaver|\s*-\s*leaver from|$)', line, re.IGNORECASE)
+            if m and m.group(1).strip():
+                name = m.group(1).strip()
+                break
+        if not name and email:
+            # Try to extract name from email
+            email_parts = email.split('@')[0].split('.')
             if len(email_parts) >= 2:
-                first_name = email_parts[0].capitalize()
-                last_name = email_parts[-1].capitalize()
-                employee_name = f"{first_name} {last_name}"
-                
-                return {
-                    'employee_name': employee_name,
-                    'employee_id': 'N/A',
-                    'leaving_date': datetime.today(),  # Default to today
-                    'manager': 'N/A',
-                    'sam_account_name': sanitize_username(employee_name),
-                    'input_type': 'email'
-                }
-        
-        # Check if input is just a name (no special notification format)
-        # If it doesn't contain notification keywords, treat it as a plain name
-        if not any(keyword in text.lower() for keyword in ['has been made a leaver', 'employee reference', 'leaving date']):
-            # It's just a plain name
-            employee_name = capitalize_name(text)
-            
-            # Check if it's a valid name (at least first and last name)
-            name_parts = employee_name.split()
-            if len(name_parts) >= 2:
-                return {
-                    'employee_name': employee_name,
-                    'employee_id': 'N/A',
-                    'leaving_date': datetime.today(),  # Default to today
-                    'manager': 'N/A',
-                    'sam_account_name': sanitize_username(employee_name),
-                    'input_type': 'name'
-                }
-        
-        # Try to parse full notification format
-        emp_match = re.search(r"^(.*?) has been made a leaver", text)
-        id_match = re.search(r"Employee Reference #:\s*(\d+)", text)
-        date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", text)
-        mgr_match = re.search(r"Reporting Manager:\s*(.+)", text)
-
-        if not all([emp_match, id_match, date_match, mgr_match]):
-            return None
+                name = f"{email_parts[0].capitalize()} {email_parts[-1].capitalize()}"
+        if not name and lines:
+            # Fallback: use first line
+            name = lines[0]
+        # If still nothing, fallback to old logic
+        if not name:
+            # Try to find in joined text
+            emp_match = re.search(r"^(.*?) has been made a leaver", joined)
+            if emp_match:
+                name = emp_match.group(1).strip()
+        # If we have a name and it's at least two words, return
+        if name and len(name.split()) >= 2:
+            return {
+                'employee_name': capitalize_name(name),
+                'employee_id': 'N/A',
+                'leaving_date': leaving_date or datetime.today(),
+                'manager': 'N/A',
+                'sam_account_name': sanitize_username(name),
+                'input_type': 'mixed'
+            }
+        # Fallback to original full notification parsing
+        emp_match = re.search(r"^(.*?) has been made a leaver", joined)
+        id_match = re.search(r"Employee Reference #:\s*(\d+)", joined)
+        date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", joined)
+        mgr_match = re.search(r"Reporting Manager:\s*(.+)", joined)
+        if all([emp_match, id_match, date_match, mgr_match]):
+            leaving_date = validate_date_format(date_match.group(1))
+            if not leaving_date:
+                return None
+            employee_name = emp_match.group(1).strip()
+            employee_name_parts = employee_name.split()
+            if len(employee_name_parts) > 2:
+                employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
+            return {
+                'employee_name': employee_name,
+                'employee_id': id_match.group(1).strip(),
+                'leaving_date': leaving_date,
+                'manager': mgr_match.group(1).strip(),
+                'sam_account_name': sanitize_username(employee_name),
+                'input_type': 'full_notification'
+            }
+        return None
 
         leaving_date = validate_date_format(date_match.group(1))
         if not leaving_date:
@@ -1006,9 +1048,28 @@ try {{
         Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc -ErrorAction Stop
         Write-Host "✅ Updated description" -ForegroundColor Green
         
+        # Remove user from all groups except 'Domain Users'
+        try {{
+            $groups = Get-ADPrincipalGroupMembership -Identity $user -ErrorAction Stop
+            foreach ($g in $groups) {{
+                if ($g.Name -ne 'Domain Users') {{
+                    try {{
+                        Remove-ADGroupMember -Identity $g.DistinguishedName -Members $user.DistinguishedName -Confirm:$false -ErrorAction Stop
+                        Write-Host "✅ Removed user from group: $($g.Name)" -ForegroundColor Green
+                    }} catch {{
+                        Write-Host "⚠️ Could not remove from group $($g.Name): $_" -ForegroundColor Yellow
+                    }}
+                }} else {{
+                    Write-Host "ℹ️ Skipping group: $($g.Name)" -ForegroundColor Cyan
+                }}
+            }}
+        }} catch {{
+            Write-Host "⚠️ Could not enumerate group membership: $_" -ForegroundColor Yellow
+        }}
+
         Set-ADUser -Identity $user.DistinguishedName -Enabled $false -ErrorAction Stop
         Write-Host "✅ Account disabled" -ForegroundColor Green
-        
+
         # Move to disabled OU
         Move-ADObject -Identity $user.DistinguishedName -TargetPath $ouPath -ErrorAction Stop
         Write-Host "✅ Moved to disabled OU" -ForegroundColor Green

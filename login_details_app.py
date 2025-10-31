@@ -1040,6 +1040,10 @@ try {{
         $existingDesc = $user.Description
         if ([string]::IsNullOrWhiteSpace($existingDesc)) {{
             $updatedDesc = $leavingNote
+        }} elseif ($existingDesc -like "*$leavingNote*") {{
+            # Avoid appending the leaving note if it's already present
+            $updatedDesc = $existingDesc
+            Write-Host "ℹ️ Leaving note already present in description; not appending." -ForegroundColor Cyan
         }} else {{
             $updatedDesc = "$existingDesc - $leavingNote"
         }}

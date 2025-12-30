@@ -66,7 +66,7 @@ DEFAULT_PASSWORD_SUFFIX = get_config("DEFAULT_PASSWORD_SUFFIX", "#24")
 COMPANY_CONFIGS = {
     "Health Intelligence": {
         "email_domain": "@inhealthgroup.com",
-        "display_name": "Health-Intelligence",
+        "display_name": "InHealth Group",
         "ad_path": AD_HI_USER_PATH,
         "sections": ["Office 365 Account", "Ad Account", "Spectra PM", "8x8 VCC Account"]
     },

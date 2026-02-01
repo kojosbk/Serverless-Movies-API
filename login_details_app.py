@@ -1031,64 +1031,86 @@ def generate_disable_user_script(details: Dict, company: str = "IHG") -> str:
     date_string = details['leaving_date'].strftime("%d/%m/%Y")
     description_suffix = f"Leaving Date: {date_string}"
     
-    # Determine the target OU based on company
+    # Determine the target OU and server based on company
     if company == "IHI":
         target_ou = AD_IHI_DISABLED_OU
+        server_param = "-Server 'hi.int'"
     else:
         target_ou = AD_DISABLED_OU
+        server_param = "-Server 'ihgd.inhealthgroup.com'"
     
     return rf"""# Disable user account for {details['employee_name']}
 $samAccountName = "{details['sam_account_name']}"
 $ouPath = "{target_ou}"
 $leavingNote = "{description_suffix}"
+$serverParam = "{server_param}"
 
 try {{
-    # Get the user account
-    $user = Get-ADUser -Identity $samAccountName -Properties Description, DistinguishedName -ErrorAction Stop
+    # Get the user account with server specification
+    $user = Get-ADUser -Identity $samAccountName -Properties Description, DistinguishedName, MemberOf {server_param} -ErrorAction Stop
 
     if ($user) {{
         Write-Host "Found user: $($user.Name)" -ForegroundColor Cyan
         
         # Update description with leaving date
         $existingDesc = $user.Description
-        if ([string]::IsNullOrWhiteSpace($existingDesc)) {{
+        
+        # Check if there's already a leaving date in the description
+        if ($existingDesc -match 'Leaving Date:\s*(\d{{2}}/\d{{2}}/\d{{4}})') {{
+            $existingDate = $matches[1]
+            if ($existingDate -eq "{date_string}") {{
+                # Same date already exists, no update needed
+                Write-Host "ℹ️ Leaving date ($existingDate) already present in description; no update needed." -ForegroundColor Cyan
+                $updatedDesc = $existingDesc
+            }} else {{
+                # Different date exists, replace it with the new date
+                $updatedDesc = $existingDesc -replace 'Leaving Date:\s*\d{{2}}/\d{{2}}/\d{{4}}', $leavingNote
+                Write-Host "ℹ️ Updated leaving date from $existingDate to {date_string}" -ForegroundColor Cyan
+            }}
+        }} elseif ([string]::IsNullOrWhiteSpace($existingDesc)) {{
+            # No description exists, set the leaving date
             $updatedDesc = $leavingNote
-        }} elseif ($existingDesc -like "*$leavingNote*") {{
-            # Avoid appending the leaving note if it's already present
-            $updatedDesc = $existingDesc
-            Write-Host "ℹ️ Leaving note already present in description; not appending." -ForegroundColor Cyan
         }} else {{
+            # Description exists but no leaving date, append it
             $updatedDesc = "$existingDesc - $leavingNote"
         }}
         
-        # Disable the account
-        Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc -ErrorAction Stop
+        # Update description
+        Set-ADUser -Identity $user.DistinguishedName -Description $updatedDesc {server_param} -ErrorAction Stop
         Write-Host "✅ Updated description" -ForegroundColor Green
         
-        # Remove user from all groups except 'Domain Users'
-        try {{
-            $groups = Get-ADPrincipalGroupMembership -Identity $user -ErrorAction Stop
-            foreach ($g in $groups) {{
-                if ($g.Name -ne 'Domain Users') {{
-                    try {{
-                        Remove-ADGroupMember -Identity $g.DistinguishedName -Members $user.DistinguishedName -Confirm:$false -ErrorAction Stop
-                        Write-Host "✅ Removed user from group: $($g.Name)" -ForegroundColor Green
-                    }} catch {{
-                        Write-Host "⚠️ Could not remove from group $($g.Name): $_" -ForegroundColor Yellow
+        # Remove user from all groups except 'Domain Users' using MemberOf property
+        if ($user.MemberOf) {{
+            Write-Host "Removing user from groups..." -ForegroundColor Cyan
+            foreach ($groupDN in $user.MemberOf) {{
+                try {{
+                    $group = Get-ADGroup -Identity $groupDN {server_param} -ErrorAction Stop
+                    if ($group.Name -ne 'Domain Users') {{
+                        try {{
+                            Remove-ADGroupMember -Identity $groupDN -Members $user.DistinguishedName -Confirm:$false {server_param} -ErrorAction Stop
+                            Write-Host "✅ Removed user from group: $($group.Name)" -ForegroundColor Green
+                        }} catch {{
+                            $errMsg = $_.Exception.Message
+                            Write-Host "⚠️ Could not remove from group $($group.Name): $errMsg" -ForegroundColor Yellow
+                        }}
+                    }} else {{
+                        Write-Host "ℹ️ Skipping group: $($group.Name)" -ForegroundColor Cyan
                     }}
-                }} else {{
-                    Write-Host "ℹ️ Skipping group: $($g.Name)" -ForegroundColor Cyan
+                }} catch {{
+                    $errMsg = $_.Exception.Message
+                    Write-Host "⚠️ Could not process group: $errMsg" -ForegroundColor Yellow
                 }}
             }}
-        }} catch {{
-            Write-Host "⚠️ Could not enumerate group membership: $_" -ForegroundColor Yellow
+        }} else {{
+            Write-Host "ℹ️ User is not a member of any groups (except primary group)" -ForegroundColor Cyan
         }}
 
-        Set-ADUser -Identity $user.DistinguishedName -Enabled $false -ErrorAction Stop
+        # Disable the account
+        Set-ADUser -Identity $user.DistinguishedName -Enabled $false {server_param} -ErrorAction Stop
         Write-Host "✅ Account disabled" -ForegroundColor Green
 
         # Move to disabled OU
-        Move-ADObject -Identity $user.DistinguishedName -TargetPath $ouPath -ErrorAction Stop
+        Move-ADObject -Identity $user.DistinguishedName -TargetPath $ouPath {server_param} -ErrorAction Stop
         Write-Host "✅ Moved to disabled OU" -ForegroundColor Green
         
         Write-Host "`n✅ User '$samAccountName' has been successfully disabled and moved." -ForegroundColor Green
@@ -1096,8 +1118,9 @@ try {{
         Write-Host "❌ User not found." -ForegroundColor Red
     }}
 }} catch {{
+    $errMsg = $_.Exception.Message
     Write-Host "❌ Error processing user '$samAccountName'" -ForegroundColor Red
-    Write-Host "Error details: $_" -ForegroundColor DarkRed
+    Write-Host "Error details: $errMsg" -ForegroundColor DarkRed
 }}"""
 
 with st.expander("🛑 Leaver Notification Parser", expanded=False):

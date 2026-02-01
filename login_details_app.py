@@ -56,6 +56,7 @@ def get_config(key: str, default: str = "") -> str:
 # Active Directory Configuration
 AD_DISABLED_OU = get_config("AD_DISABLED_OU", "OU=Disabled to Delete,OU=IHGD HouseKeeping,OU=IHGD Internal,DC=ihgd,DC=inhealthgroup,DC=com")
 AD_HI_USER_PATH = get_config("AD_HI_USER_PATH", "OU=AHW DESP,OU=HIUsers,DC=hi,DC=int")
+AD_IHI_DISABLED_OU = get_config("AD_IHI_DISABLED_OU", "OU=Leavers,OU=Disabled,OU=HIUsers,DC=hi,DC=int")
 
 # Password Configuration (loaded from environment variables or Streamlit secrets)
 XRM_DEFAULT_PASSWORD = get_config("XRM_DEFAULT_PASSWORD", "****")
@@ -901,25 +902,68 @@ def parse_leaver_notification(text: str) -> Optional[Dict]:
     """
     Parse leaver notification and extract details.
     Supports three input formats:
-    1. Full notification text (with all details)
+    1. Full notification text (with all details - iTrent format)
     2. Just an email address (e.g., john.smith@inhealthgroup.com)
     3. Just a name (e.g., John Smith)
+    
+    iTrent format example:
+    [Name] has been made a leaver:
+    Employee Reference #: [ID]
+    Leaving Date: DD/MM/YYYY
+    Reporting Manager: [Manager]
+    Department: [Dept]
     """
     try:
         text = text.strip()
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         joined = " ".join(lines)
-        # Try to extract email, name, and date from any line
+        
+        # Initialize variables
         email = None
         name = None
+        employee_id = None
         leaving_date = None
-        # 1. Find email
+        manager = None
+        
+        # 1. Try full notification parsing first (iTrent format)
+        emp_match = re.search(r"^(.*?)\s+has\s+been\s+made\s+a\s+leaver", joined, re.IGNORECASE)
+        id_match = re.search(r"Employee\s+Reference\s*#:\s*(\d+)", joined, re.IGNORECASE)
+        date_match = re.search(r"Leaving\s+Date:\s*(\d{2}/\d{2}/\d{4})", joined, re.IGNORECASE)
+        mgr_match = re.search(r"Reporting\s+Manager:\s*([^\n:]+?)(?:\s*(?:Department|$))", joined, re.IGNORECASE)
+        
+        # If we found all required fields in full notification format, use them
+        if emp_match and id_match and date_match and mgr_match:
+            name = emp_match.group(1).strip()
+            employee_id = id_match.group(1).strip()
+            leaving_date_str = date_match.group(1).strip()
+            manager = mgr_match.group(1).strip()
+            
+            # Validate and parse the date
+            leaving_date = validate_date_format(leaving_date_str)
+            if leaving_date and name:
+                # Extract first and last name only (ignore middle names)
+                employee_name_parts = name.split()
+                if len(employee_name_parts) > 2:
+                    name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
+                
+                return {
+                    'employee_name': name,
+                    'employee_id': employee_id,
+                    'leaving_date': leaving_date,
+                    'manager': manager,
+                    'sam_account_name': sanitize_username(name),
+                    'input_type': 'full_notification'
+                }
+        
+        # 2. If full notification parsing failed, try alternative methods
+        # Find email
         for line in lines:
             m = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', line)
             if m:
                 email = m.group(0)
                 break
-        # 2. Find date (supports 'leaver from 25th October', 'leaving date: ...', 'from ...', etc.)
+        
+        # Find date (supports 'leaver from 25th October', 'leaving date: ...', 'from ...', etc.)
         for line in lines:
             # Try DD/MM/YYYY
             m = re.search(r'(\d{1,2}/\d{1,2}/\d{4})', line)
@@ -943,90 +987,59 @@ def parse_leaver_notification(text: str) -> Optional[Dict]:
                         continue
                 if leaving_date:
                     break
-        # 3. Find name (look for ' - leaver', or first line, or from email)
+        
+        # Find name (look for ' - leaver', or first line, or from email)
         for line in lines:
             m = re.match(r'^(.*?)(?:\s*-\s*leaver|\s*-\s*leaver from|$)', line, re.IGNORECASE)
             if m and m.group(1).strip():
                 name = m.group(1).strip()
                 break
+        
+        # Try to extract name from email if not found
         if not name and email:
-            # Try to extract name from email
             email_parts = email.split('@')[0].split('.')
             if len(email_parts) >= 2:
                 name = f"{email_parts[0].capitalize()} {email_parts[-1].capitalize()}"
+        
+        # Fallback: use first line if still no name
         if not name and lines:
-            # Fallback: use first line
             name = lines[0]
-        # If still nothing, fallback to old logic
-        if not name:
-            # Try to find in joined text
-            emp_match = re.search(r"^(.*?) has been made a leaver", joined)
-            if emp_match:
-                name = emp_match.group(1).strip()
-        # If we have a name and it's at least two words, return
+        
+        # If we have a valid name (at least two words) and date, return
         if name and len(name.split()) >= 2:
             return {
                 'employee_name': capitalize_name(name),
-                'employee_id': 'N/A',
+                'employee_id': employee_id or 'N/A',
                 'leaving_date': leaving_date or datetime.today(),
-                'manager': 'N/A',
+                'manager': manager or 'N/A',
                 'sam_account_name': sanitize_username(name),
                 'input_type': 'mixed'
             }
-        # Fallback to original full notification parsing
-        emp_match = re.search(r"^(.*?) has been made a leaver", joined)
-        id_match = re.search(r"Employee Reference #:\s*(\d+)", joined)
-        date_match = re.search(r"Leaving Date:\s*(\d{2}/\d{2}/\d{4})", joined)
-        mgr_match = re.search(r"Reporting Manager:\s*(.+)", joined)
-        if all([emp_match, id_match, date_match, mgr_match]):
-            leaving_date = validate_date_format(date_match.group(1))
-            if not leaving_date:
-                return None
-            employee_name = emp_match.group(1).strip()
-            employee_name_parts = employee_name.split()
-            if len(employee_name_parts) > 2:
-                employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
-            return {
-                'employee_name': employee_name,
-                'employee_id': id_match.group(1).strip(),
-                'leaving_date': leaving_date,
-                'manager': mgr_match.group(1).strip(),
-                'sam_account_name': sanitize_username(employee_name),
-                'input_type': 'full_notification'
-            }
+        
         return None
-
-        leaving_date = validate_date_format(date_match.group(1))
-        if not leaving_date:
-            return None
-
-        employee_name = emp_match.group(1).strip()
-        
-        # Extract first and last name only (ignore middle names)
-        employee_name_parts = employee_name.split()
-        if len(employee_name_parts) > 2:
-            employee_name = f"{employee_name_parts[0]} {employee_name_parts[-1]}"
-        
-        return {
-            'employee_name': employee_name,
-            'employee_id': id_match.group(1).strip(),
-            'leaving_date': leaving_date,
-            'manager': mgr_match.group(1).strip(),
-            'sam_account_name': sanitize_username(employee_name),
-            'input_type': 'full_notification'
-        }
     except Exception as e:
         st.error(f"Error parsing leaver notification: {str(e)}")
         return None
 
-def generate_disable_user_script(details: Dict) -> str:
-    """Generate PowerShell script to disable user account."""
+def generate_disable_user_script(details: Dict, company: str = "IHG") -> str:
+    """Generate PowerShell script to disable user account.
+    
+    Args:
+        details: Dictionary with employee details
+        company: Company type - "IHI" (Health Intelligence) or "IHG" (InHealth Group)
+    """
     date_string = details['leaving_date'].strftime("%d/%m/%Y")
     description_suffix = f"Leaving Date: {date_string}"
     
+    # Determine the target OU based on company
+    if company == "IHI":
+        target_ou = AD_IHI_DISABLED_OU
+    else:
+        target_ou = AD_DISABLED_OU
+    
     return rf"""# Disable user account for {details['employee_name']}
 $samAccountName = "{details['sam_account_name']}"
-$ouPath = "{AD_DISABLED_OU}"
+$ouPath = "{target_ou}"
 $leavingNote = "{description_suffix}"
 
 try {{
@@ -1090,11 +1103,11 @@ try {{
 with st.expander("🛑 Leaver Notification Parser", expanded=False):
     st.markdown("""
     **Instructions:** Provide employee information in any of these formats:
-    - **Full notification** (with all details)
+    - **Full iTrent notification email** (with all details including Employee Reference #, Leaving Date, Reporting Manager)
     - **Just the name** (e.g., "John Smith")
     - **Just the email** (e.g., "john.smith@inhealthgroup.com")
     
-    The system will generate a script to disable the account and move it to the appropriate OU.
+    The system will extract the employee name and leaving date, then generate a script to disable the account and move it to the appropriate OU.
     """)
     
     leaver_text = st.text_area(
@@ -1104,6 +1117,20 @@ with st.expander("🛑 Leaver Notification Parser", expanded=False):
         help="Accepts full notifications, names, or email addresses",
         key="leaver_text"
     )
+
+    # Company selection
+    st.markdown("**Select Employee Company:**")
+    company = st.radio(
+        "Which company is the leaver from?",
+        options=["IHG (InHealth Group)", "IHI (Health Intelligence)"],
+        index=0,
+        horizontal=True,
+        help="IHG: Uses standard disabled OU | IHI: Uses OU=Leavers,OU=Disabled,OU=HIUsers,DC=hi,DC=int",
+        label_visibility="collapsed"
+    )
+    
+    # Convert radio selection to company code
+    company_code = "IHG" if "IHG" in company else "IHI"
 
     if st.button("🚀 Generate Disable User Script", key="disable_user", type="primary"):
         if not leaver_text.strip():
@@ -1116,11 +1143,14 @@ with st.expander("🛑 Leaver Notification Parser", expanded=False):
                 st.error("❌ Could not extract leaver details. Please check the input format.")
                 st.info("""
                 **Accepted formats:**
-                1. **Full notification:**
-                   - [Name] has been made a leaver
-                   - Employee Reference #: [ID]
-                   - Leaving Date: DD/MM/YYYY
-                   - Reporting Manager: [Manager Name]
+                1. **Full iTrent notification:**
+                   ```
+                   [Name] has been made a leaver:
+                   Employee Reference #: [ID]
+                   Leaving Date: DD/MM/YYYY
+                   Reporting Manager: [Manager Name]
+                   Department: [Department]
+                   ```
                 
                 2. **Just a name:** John Smith
                 
@@ -1155,7 +1185,7 @@ with st.expander("🛑 Leaver Notification Parser", expanded=False):
                 st.markdown("---")
                 
                 script_filename = f"Disable-{details['employee_name'].replace(' ', '-')}.ps1"
-                disable_script = generate_disable_user_script(details)
+                disable_script = generate_disable_user_script(details, company_code)
                 
                 if is_future:
                     days_until = (details['leaving_date'] - today).days
@@ -1239,18 +1269,47 @@ def parse_m1(text: str) -> Dict[str, str]:
     
     return data
 
+def year_to_roman(year: int) -> str:
+    """Convert year (last 2 digits) to Roman numerals."""
+    val = [100, 90, 50, 40, 10, 9, 5, 4, 1]
+    syms = ["C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    roman_num = ''
+    i = 0
+    while year > 0:
+        for _ in range(year // val[i]):
+            roman_num += syms[i]
+            year -= val[i]
+        i += 1
+    return roman_num
+
 def generate_password_from_name(first_name: str, last_name: str) -> str:
     """
-    Generate a standardized password from employee name.
-    Format: First 3 letters + Last 3 letters + suffix from env
+    Generate an improved temporary password from employee name.
+    Format: FirstName(4 chars) + Year(2-digit Roman) + LastName(3 chars) + #Month
+    Example: SharXXVILai#02 (26 in Roman numerals for 2026)
+    
+    Benefits:
+    - More secure with year in Roman numerals
+    - Still easy to remember (based on name and current year)
+    - Year changes annually providing natural password rotation
+    - Better entropy than pure name-based password
     """
     if not first_name or not last_name:
         return generate_secure_password()
     
-    first_part = first_name.lower()[:3]
+    # Get last 2 digits of current year as Roman numerals
+    current_year = datetime.today().year % 100
+    year_roman = year_to_roman(current_year)
+    
+    # Get current month as 2-digit number
+    current_month = datetime.today().strftime("%m")
+    
+    # Build password: First 4 chars of first name + Year(Roman) + Last 3 chars of last name + #Month
+    first_part = first_name.capitalize()[:4]
     last_part = last_name.lower()[:3]
-    password = f"{first_part}{last_part}{DEFAULT_PASSWORD_SUFFIX}"
-    return password.capitalize()
+    password = f"{first_part}{year_roman}{last_part}#{current_month}"
+    
+    return password
 
 def generate_onboarding_details(data: Dict[str, str]) -> Dict:
     """Generate comprehensive onboarding details from M1 data."""

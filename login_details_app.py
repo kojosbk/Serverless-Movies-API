@@ -1055,17 +1055,43 @@ try {{
         # Update description with leaving date
         $existingDesc = $user.Description
         
+        # Function to convert old format (DDMMYYYY) to new format (DD/MM/YYYY)
+        function Convert-OldDateFormat {{
+            param([string]$dateStr)
+            if ($dateStr -match '^(\d{{2}})(\d{{2}})(\d{{4}})$') {{
+                return "$($matches[1])/$($matches[2])/$($matches[3])"
+            }}
+            return $null
+        }}
+        
         # Check if there's already a leaving date in the description
         if ($existingDesc -match 'Leaving Date:\s*(\d{{2}}/\d{{2}}/\d{{4}})') {{
+            # New format date found
             $existingDate = $matches[1]
             if ($existingDate -eq "{date_string}") {{
                 # Same date already exists, no update needed
-                Write-Host "ℹ️ Leaving date ($existingDate) already present in description; no update needed." -ForegroundColor Cyan
+                Write-Host "ℹ️ Leaving date ($existingDate) already present; no update needed." -ForegroundColor Cyan
                 $updatedDesc = $existingDesc
             }} else {{
-                # Different date exists, replace it with the new date
-                $updatedDesc = $existingDesc -replace 'Leaving Date:\s*\d{{2}}/\d{{2}}/\d{{4}}', $leavingNote
-                Write-Host "ℹ️ Updated leaving date from $existingDate to {date_string}" -ForegroundColor Cyan
+                # Different date - clean up and set new format
+                $jobTitle = $existingDesc -replace '\s*-?\s*(Leaving Date|Leave Date)\s*:?.*$', ''
+                $updatedDesc = "$jobTitle - $leavingNote"
+                Write-Host "ℹ️ Replaced leaving date from $existingDate to {date_string}" -ForegroundColor Cyan
+            }}
+        }} elseif ($existingDesc -match 'Leave Date\s*:?\s*(\d{{8}})') {{
+            # Old format date found (e.g., "30012026")
+            $oldFormatDate = $matches[1]
+            $convertedOldDate = Convert-OldDateFormat -dateStr $oldFormatDate
+            
+            if ($convertedOldDate -eq "{date_string}") {{
+                # Same date, leave as is
+                Write-Host "ℹ️ Leaving date matches existing date ($convertedOldDate); no update needed." -ForegroundColor Cyan
+                $updatedDesc = $existingDesc
+            }} else {{
+                # Different date - clean up and set new format
+                $jobTitle = $existingDesc -replace '\s*-?\s*(Leaving Date|Leave Date)\s*:?.*$', ''
+                $updatedDesc = "$jobTitle - $leavingNote"
+                Write-Host "ℹ️ Replaced leaving date from $convertedOldDate to {date_string}" -ForegroundColor Cyan
             }}
         }} elseif ([string]::IsNullOrWhiteSpace($existingDesc)) {{
             # No description exists, set the leaving date

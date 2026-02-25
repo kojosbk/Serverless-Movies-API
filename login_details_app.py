@@ -1358,9 +1358,190 @@ def generate_password_from_name(first_name: str, last_name: str) -> str:
     last_part = last_name.lower()[:3]
     password = f"{first_part}{year_roman}{last_part}#{current_month}"
     
-    return password
+    # Remove the first character as requested
+    return password[1:]
 
-def generate_onboarding_details(data: Dict[str, str]) -> Dict:
+def generate_group_clone_script(source_input: str, target_sam: str, domain: str) -> str:
+    """Generate a PowerShell script to clone AD groups from source to target.
+
+    Args:
+        source_input: Source user (sAMAccountName, email, or FirstName LastName).
+        target_sam: Target user's sAMAccountName.
+        domain: "IHI" or "IHG".
+    """
+    if domain == "IHI":
+        server = "hi.int"
+    else:
+        server = "ihgd.inhealthgroup.com"
+
+    return rf"""# Clone AD group memberships
+# Domain: {domain}
+$ErrorActionPreference = "Stop"
+Import-Module ActiveDirectory -ErrorAction Stop
+
+$sourceInput = "{source_input}"
+$targetSam = "{target_sam}"
+$server = "{server}"
+
+function Escape-LdapFilterValue {{
+    param([Parameter(Mandatory)][string]$Value)
+    $Value `
+        -replace "\\", "\5c" `
+        -replace "\*", "\2a" `
+        -replace "\(", "\28" `
+        -replace "\)", "\29" `
+        -replace "\0", "\00"
+}}
+
+function Resolve-ADUserFlexible {{
+    param([Parameter(Mandatory)][string]$InputRaw)
+
+    $input = $InputRaw.Trim()
+    if ([string]::IsNullOrWhiteSpace($input)) {{ throw "No input provided." }}
+
+    # Email / UPN
+    if ($input -match "@") {{
+        $v = Escape-LdapFilterValue $input
+        $u = Get-ADUser -LDAPFilter "(|(userPrincipalName=$v)(mail=$v))" -Properties mail,userPrincipalName -Server $server -ErrorAction SilentlyContinue
+        if ($u) {{ return $u }}
+    }}
+
+    # sAMAccountName (strip spaces)
+    $sam = ($input -replace "\s", "")
+    $vSam = Escape-LdapFilterValue $sam
+    $u = Get-ADUser -LDAPFilter "(sAMAccountName=$vSam)" -Properties mail,userPrincipalName -Server $server -ErrorAction SilentlyContinue
+    if ($u) {{ return $u }}
+
+    # FirstName LastName
+    if ($input -match "^\S+\s+\S+") {{
+        $parts = $input -split "\s+", 2
+        $first = Escape-LdapFilterValue $parts[0]
+        $last  = Escape-LdapFilterValue $parts[1]
+
+        $matches = Get-ADUser -LDAPFilter "(&(givenName=$first)(sn=$last))" -Properties mail,userPrincipalName -Server $server -ErrorAction SilentlyContinue
+        if ($matches.Count -gt 1) {{ throw "Multiple users found for '$input'. Use username or email." }}
+        if ($matches) {{ return $matches }}
+    }}
+
+    throw "User '$InputRaw' not found in Active Directory."
+}}
+
+$srcUser = Resolve-ADUserFlexible $sourceInput
+$dstUser = Get-ADUser -Identity $targetSam -Server $server -ErrorAction Stop
+
+Write-Host "Source : $($srcUser.SamAccountName)" -ForegroundColor Cyan
+Write-Host "Target : $($dstUser.SamAccountName)" -ForegroundColor Cyan
+
+# Get source groups
+$srcUserFull = Get-ADUser -Identity $srcUser.DistinguishedName -Properties MemberOf -Server $server
+if (-not $srcUserFull.MemberOf) {{
+    Write-Warning "Source user has no group memberships."
+    return
+}}
+
+$excludeNames = @("Domain Users")
+$groupsToClone = $srcUserFull.MemberOf |
+    Get-ADGroup -Server $server |
+    Where-Object {{ $excludeNames -notcontains $_.Name }}
+
+# Get target existing groups
+$dstSet = New-Object "System.Collections.Generic.HashSet[string]"
+$dstUserFull = Get-ADUser -Identity $dstUser.DistinguishedName -Properties MemberOf -Server $server
+if ($dstUserFull.MemberOf) {{
+    $dstUserFull.MemberOf | ForEach-Object {{ [void]$dstSet.Add($_) }}
+}}
+
+# Clone groups
+$added   = @()
+$skipped = @()
+$failed  = @()
+
+foreach ($group in $groupsToClone) {{
+    if ($dstSet.Contains($group.DistinguishedName)) {{
+        $skipped += $group.Name
+        continue
+    }}
+
+    try {{
+        Add-ADGroupMember -Identity $group.DistinguishedName -Members $dstUser.DistinguishedName -Server $server -ErrorAction Stop
+        $added += $group.Name
+        [void]$dstSet.Add($group.DistinguishedName)
+    }} catch {{
+        $failed += "$($group.Name) :: $($_.Exception.Message)"
+    }}
+}}
+
+# Summary
+Write-Host "=== Group Clone Summary ==="
+Write-Host "Added   : $($added.Count)"
+Write-Host "Skipped : $($skipped.Count)"
+Write-Host "Failed  : $($failed.Count)"
+
+if ($added) {{
+    Write-Host ""; Write-Host "Added groups:"
+    $added | Sort-Object | ForEach-Object {{ Write-Host "  $_" }}
+}}
+
+if ($skipped) {{
+    Write-Host ""; Write-Host "Already had (skipped):"
+    $skipped | Sort-Object | ForEach-Object {{ Write-Host "  $_" }}
+}}
+
+if ($failed) {{
+    Write-Host ""; Write-Host "Failed:"
+    $failed | ForEach-Object {{ Write-Host "  $_" }}
+}}
+
+Write-Host ""
+if (-not $failed -and $added) {{
+    Write-Host "Done. Group memberships cloned successfully."
+}}
+
+if (-not $failed -and -not $added -and $skipped) {{
+    Write-Host "Nothing to add. Target already has all the source groups."
+}}
+
+if ($failed) {{
+    Write-Host "Completed with some errors."
+}}
+"""
+
+def detect_mirror_user(data: Dict[str, str]) -> str:
+    """Try to detect a mirror user from M1 data fields."""
+    if not data:
+        return ""
+
+    explicit_keys = {
+        "Mirror User",
+        "Mirror User Name",
+        "Mirror From",
+        "Mirror From User",
+        "Mirror From Username",
+        "Clone From",
+        "Clone User",
+        "Copy From",
+        "Copy User",
+        "AD Mirror User",
+        "AD Clone User",
+        "Template User",
+        "Similar User",
+    }
+
+    for key in explicit_keys:
+        value = data.get(key, "").strip()
+        if value:
+            return value
+
+    for key, value in data.items():
+        if not value:
+            continue
+        key_lower = key.lower()
+        if any(token in key_lower for token in ["mirror", "clone", "copy", "template"]):
+            return value.strip()
+
+    return ""
+
+def generate_onboarding_details(data: Dict[str, str], mirror_user: str = "") -> Dict:
     """Generate comprehensive onboarding details from M1 data."""
     try:
         # Extract and capitalize names
@@ -1399,9 +1580,11 @@ def generate_onboarding_details(data: Dict[str, str]) -> Dict:
 
         # Determine company and generate appropriate scripts
         company_reg = data.get("Company Registered Number", "")
+        domain_code = "IHG"
         
         if "Health Intelligence" in company_reg:
             config = COMPANY_CONFIGS["Health Intelligence"]
+            domain_code = "IHI"
             user_email = f"{username}{config['email_domain']}"
             company_display = config['display_name']
             
@@ -1495,6 +1678,14 @@ try {{
         if permissions:
             sections = sections + ["Permissions"]
 
+        resolved_mirror_user = mirror_user.strip() or detect_mirror_user(data)
+        group_clone_script = ""
+        if resolved_mirror_user:
+            group_clone_script = generate_group_clone_script(resolved_mirror_user, username, domain_code)
+
+        provisioning_parts = [p for p in [ad_create_script, ad_update_script, group_clone_script] if p]
+        provisioning_script = "\n\n# ---- Next Step ----\n\n".join(provisioning_parts)
+
         # Generate messages
         manager_first_name = manager_name.split()[0] if manager_name else "Manager"
         
@@ -1566,8 +1757,11 @@ Thanks!"""
             "Permissions": ", ".join(permissions) if permissions else "None",
             "AD Create Script": ad_create_script,
             "AD Update Script": ad_update_script,
+            "AD Provisioning Script": provisioning_script,
             "Message to Manager": message_to_manager,
             "Jira Reply": jira_reply,
+            "Group Clone Script": group_clone_script,
+            "Mirror User": resolved_mirror_user,
             "Sections": sections
         }
     except Exception as e:
@@ -1587,6 +1781,12 @@ with st.expander("👤 M1 New Employee Onboarding", expanded=False):
         key="m1_input"
     )
 
+    mirror_user = st.text_input(
+        "Mirror groups from existing user (optional):",
+        placeholder="e.g. jane.doe or jane.doe@inhealthgroup.com or Jane Doe",
+        help="If left blank, the app will try to auto-detect a mirror user from the M1 data."
+    )
+
     if st.button("🚀 Generate Onboarding Details", key="m1_generate", type="primary"):
         if not m1_input.strip():
             st.warning("⚠️ Please paste M1 data before generating.")
@@ -1594,7 +1794,7 @@ with st.expander("👤 M1 New Employee Onboarding", expanded=False):
             with st.spinner("🔄 Processing M1 data..."):
                 m1_data = parse_m1(m1_input)
                 if m1_data:
-                    onboarding_details = generate_onboarding_details(m1_data)
+                    onboarding_details = generate_onboarding_details(m1_data, mirror_user)
                 else:
                     onboarding_details = None
             
@@ -1678,29 +1878,24 @@ Company: {onboarding_details["Company"]}""", language='text')
                                 st.markdown("**Manager:**")
                             with col2:
                                 st.code(onboarding_details["Manager"], language='text')
-                            
+
                             col1, col2 = st.columns([1, 3])
                             with col1:
                                 st.markdown("**User Email:**")
                             with col2:
                                 st.code(onboarding_details["User Email"], language='text')
-                            
-                            if onboarding_details["AD Create Script"]:
-                                st.markdown("**PowerShell Create Script:**")
-                                st.code(onboarding_details["AD Create Script"], language='powershell')
+
+                            if onboarding_details.get("Mirror User"):
+                                st.info(f"ℹ️ Mirror user detected: {onboarding_details['Mirror User']}")
+
+                            if onboarding_details["AD Provisioning Script"]:
+                                st.markdown("**AD Provisioning Script (Create/Update + Group Clone):**")
+                                st.code(onboarding_details["AD Provisioning Script"], language='powershell')
                                 create_download_button(
-                                    onboarding_details["AD Create Script"],
-                                    f"Create-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
-                                    "Download Create Script"
+                                    onboarding_details["AD Provisioning Script"],
+                                    f"Provision-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                    "Download Provisioning Script"
                                 )
-                            
-                            st.markdown("**PowerShell Update Script:**")
-                            st.code(onboarding_details["AD Update Script"], language='powershell')
-                            create_download_button(
-                                onboarding_details["AD Update Script"],
-                                f"Update-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
-                                "Download Update Script"
-                            )
                         
                         elif section == "VPN Account":
                             st.markdown("**VPN Account Details:**")

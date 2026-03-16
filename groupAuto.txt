@@ -1,0 +1,376 @@
+<#
+Clone AD group memberships from one user to another
+Choose domain: IHI or IHG
+
+Accepts:
+  - sAMAccountName
+  - email address
+  - FirstName LastName
+
+Excludes: Domain Users
+Skips groups the target already has
+No files written
+#>
+
+$ErrorActionPreference = "Stop"
+Import-Module ActiveDirectory -ErrorAction Stop
+
+function Escape-LdapFilterValue {
+    param([Parameter(Mandatory)][string]$Value)
+    $Value `
+        -replace "\\", "\5c" `
+        -replace "\*", "\2a" `
+        -replace "\(", "\28" `
+        -replace "\)", "\29" `
+        -replace "\0", "\00"
+}
+
+function Resolve-ADUserFlexible {
+    param([Parameter(Mandatory)][string]$InputRaw)
+
+    $input = $InputRaw.Trim()
+    if ([string]::IsNullOrWhiteSpace($input)) { throw "No input provided." }
+
+    # Email / UPN
+    if ($input -match "@") {
+        $v = Escape-LdapFilterValue $input
+        $u = Get-ADUser -LDAPFilter "(|(userPrincipalName=$v)(mail=$v))" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+        if ($u) { return $u }
+    }
+
+    # sAMAccountName (strip spaces)
+    $sam = ($input -replace "\s","")
+    $vSam = Escape-LdapFilterValue $sam
+    $u = Get-ADUser -LDAPFilter "(sAMAccountName=$vSam)" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+    if ($u) { return $u }
+
+    # FirstName LastName
+    if ($input -match "^\S+\s+\S+") {
+        $parts = $input -split "\s+", 2
+        $first = Escape-LdapFilterValue $parts[0]
+        $last  = Escape-LdapFilterValue $parts[1]
+
+        $matches = Get-ADUser -LDAPFilter "(&(givenName=$first)(sn=$last))" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+        if ($matches.Count -gt 1) { throw "Multiple users found for '$input'. Use username or email." }
+        if ($matches) { return $matches }
+    }
+
+    throw "User '$InputRaw' not found in Active Directory."
+}
+
+function Get-Choice {
+    param(
+        [string]$Prompt,
+        [hashtable]$Options
+    )
+
+    Write-Host ""
+    Write-Host $Prompt
+    foreach ($k in ($Options.Keys | Sort-Object)) {
+        Write-Host "  $k) $($Options[$k])"
+    }
+
+    while ($true) {
+        $c = (Read-Host "Select option").Trim().ToLower()
+        if ($Options.ContainsKey($c)) { return $c }
+        Write-Host "Invalid option. Try again."
+    }
+}
+
+# ---- Choose domain logic ----
+$mode = Get-Choice -Prompt "Which domain are you working in?" -Options @{
+    "1" = "IHI"
+    "2" = "IHG"
+}
+
+Write-Host ""
+Write-Host ("Selected: {0}" -f (@{ "1"="IHI"; "2"="IHG" }[$mode]))
+Write-Host ""
+
+# ---- Prompt users ----
+$srcRaw = Read-Host "Enter SOURCE user (username, email, or FirstName LastName)"
+$dstRaw = Read-Host "Enter TARGET user (username, email, or FirstName LastName)"
+
+$srcUser = Resolve-ADUserFlexible $srcRaw
+$dstUser = Resolve-ADUserFlexible $dstRaw
+
+Write-Host ""
+Write-Host "Source : $($srcUser.SamAccountName)"
+Write-Host "Target : $($dstUser.SamAccountName)"
+Write-Host ""
+
+# ---- Get source groups ----
+$srcUserFull = Get-ADUser -Identity $srcUser.DistinguishedName -Properties MemberOf
+if (-not $srcUserFull.MemberOf) {
+    Write-Warning "Source user has no group memberships."
+    return
+}
+
+$excludeNames = @("Domain Users")
+
+$groupsToClone = $srcUserFull.MemberOf |
+    Get-ADGroup |
+    Where-Object { $excludeNames -notcontains $_.Name }
+
+# ---- Get target existing groups (differs by mode) ----
+$dstSet = New-Object "System.Collections.Generic.HashSet[string]"
+
+if ($mode -eq "1") {
+    # IHI method: uses Get-ADPrincipalGroupMembership (works fine in IHI)
+    $dstExisting = Get-ADPrincipalGroupMembership -Identity $dstUser |
+        Select-Object -ExpandProperty DistinguishedName
+    $dstExisting | ForEach-Object { [void]$dstSet.Add($_) }
+}
+else {
+    # IHG method: uses MemberOf to avoid "user not authenticated" issue
+    $dstUserFull = Get-ADUser -Identity $dstUser.DistinguishedName -Properties MemberOf
+    if ($dstUserFull.MemberOf) {
+        $dstUserFull.MemberOf | ForEach-Object { [void]$dstSet.Add($_) }
+    }
+}
+
+# ---- Clone groups ----
+$added   = @()
+$skipped = @()
+$failed  = @()
+
+foreach ($group in $groupsToClone) {
+    if ($dstSet.Contains($group.DistinguishedName)) {
+        $skipped += $group.Name
+        continue
+    }
+
+    try {
+        Add-ADGroupMember -Identity $group.DistinguishedName -Members $dstUser.DistinguishedName -ErrorAction Stop
+        $added += $group.Name
+        [void]$dstSet.Add($group.DistinguishedName)
+    }
+    catch {
+        $failed += "$($group.Name) :: $($_.Exception.Message)"
+    }
+}
+
+# ---- Summary (no elseif/else blocks, avoids paste errors) ----
+Write-Host "=== Group Clone Summary ==="
+Write-Host "Added   : $($added.Count)"
+Write-Host "Skipped : $($skipped.Count)"
+Write-Host "Failed  : $($failed.Count)"
+
+if ($added) {
+    Write-Host ""
+    Write-Host "Added groups:"
+    $added | Sort-Object | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($skipped) {
+    Write-Host ""
+    Write-Host "Already had (skipped):"
+    $skipped | Sort-Object | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($failed) {
+    Write-Host ""
+    Write-Host "Failed:"
+    $failed | ForEach-Object { Write-Host "  $_" }
+}
+
+Write-Host ""
+if (-not $failed -and $added) {
+    Write-Host "Done. Group memberships cloned successfully."
+}
+
+if (-not $failed -and -not $added -and $skipped) {
+    Write-Host "Nothing to add. Target already has all the source groups."
+}
+
+if ($failed) {
+    Write-Host "Completed with some errors."
+}
+<#
+Clone AD group memberships from one user to another
+Choose domain: IHI or IHG
+
+Accepts:
+  - sAMAccountName
+  - email address
+  - FirstName LastName
+
+Excludes: Domain Users
+Skips groups the target already has
+No files written
+#>
+
+$ErrorActionPreference = "Stop"
+Import-Module ActiveDirectory -ErrorAction Stop
+
+function Escape-LdapFilterValue {
+    param([Parameter(Mandatory)][string]$Value)
+    $Value `
+        -replace "\\", "\5c" `
+        -replace "\*", "\2a" `
+        -replace "\(", "\28" `
+        -replace "\)", "\29" `
+        -replace "\0", "\00"
+}
+
+function Resolve-ADUserFlexible {
+    param([Parameter(Mandatory)][string]$InputRaw)
+
+    $input = $InputRaw.Trim()
+    if ([string]::IsNullOrWhiteSpace($input)) { throw "No input provided." }
+
+    # Email / UPN
+    if ($input -match "@") {
+        $v = Escape-LdapFilterValue $input
+        $u = Get-ADUser -LDAPFilter "(|(userPrincipalName=$v)(mail=$v))" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+        if ($u) { return $u }
+    }
+
+    # sAMAccountName (strip spaces)
+    $sam = ($input -replace "\s","")
+    $vSam = Escape-LdapFilterValue $sam
+    $u = Get-ADUser -LDAPFilter "(sAMAccountName=$vSam)" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+    if ($u) { return $u }
+
+    # FirstName LastName
+    if ($input -match "^\S+\s+\S+") {
+        $parts = $input -split "\s+", 2
+        $first = Escape-LdapFilterValue $parts[0]
+        $last  = Escape-LdapFilterValue $parts[1]
+
+        $matches = Get-ADUser -LDAPFilter "(&(givenName=$first)(sn=$last))" -Properties mail,userPrincipalName -ErrorAction SilentlyContinue
+        if ($matches.Count -gt 1) { throw "Multiple users found for '$input'. Use username or email." }
+        if ($matches) { return $matches }
+    }
+
+    throw "User '$InputRaw' not found in Active Directory."
+}
+
+function Get-Choice {
+    param(
+        [string]$Prompt,
+        [hashtable]$Options
+    )
+
+    Write-Host ""
+    Write-Host $Prompt
+    foreach ($k in ($Options.Keys | Sort-Object)) {
+        Write-Host "  $k) $($Options[$k])"
+    }
+
+    while ($true) {
+        $c = (Read-Host "Select option").Trim().ToLower()
+        if ($Options.ContainsKey($c)) { return $c }
+        Write-Host "Invalid option. Try again."
+    }
+}
+
+# ---- Choose domain logic ----
+$mode = Get-Choice -Prompt "Which domain are you working in?" -Options @{
+    "1" = "IHI"
+    "2" = "IHG"
+}
+
+Write-Host ""
+Write-Host ("Selected: {0}" -f (@{ "1"="IHI"; "2"="IHG" }[$mode]))
+Write-Host ""
+
+# ---- Prompt users ----
+$srcRaw = Read-Host "Enter SOURCE user (username, email, or FirstName LastName)"
+$dstRaw = Read-Host "Enter TARGET user (username, email, or FirstName LastName)"
+
+$srcUser = Resolve-ADUserFlexible $srcRaw
+$dstUser = Resolve-ADUserFlexible $dstRaw
+
+Write-Host ""
+Write-Host "Source : $($srcUser.SamAccountName)"
+Write-Host "Target : $($dstUser.SamAccountName)"
+Write-Host ""
+
+# ---- Get source groups ----
+$srcUserFull = Get-ADUser -Identity $srcUser.DistinguishedName -Properties MemberOf
+if (-not $srcUserFull.MemberOf) {
+    Write-Warning "Source user has no group memberships."
+    return
+}
+
+$excludeNames = @("Domain Users")
+
+$groupsToClone = $srcUserFull.MemberOf |
+    Get-ADGroup |
+    Where-Object { $excludeNames -notcontains $_.Name }
+
+# ---- Get target existing groups (differs by mode) ----
+$dstSet = New-Object "System.Collections.Generic.HashSet[string]"
+
+if ($mode -eq "1") {
+    # IHI method: uses Get-ADPrincipalGroupMembership (works fine in IHI)
+    $dstExisting = Get-ADPrincipalGroupMembership -Identity $dstUser |
+        Select-Object -ExpandProperty DistinguishedName
+    $dstExisting | ForEach-Object { [void]$dstSet.Add($_) }
+}
+else {
+    # IHG method: uses MemberOf to avoid "user not authenticated" issue
+    $dstUserFull = Get-ADUser -Identity $dstUser.DistinguishedName -Properties MemberOf
+    if ($dstUserFull.MemberOf) {
+        $dstUserFull.MemberOf | ForEach-Object { [void]$dstSet.Add($_) }
+    }
+}
+
+# ---- Clone groups ----
+$added   = @()
+$skipped = @()
+$failed  = @()
+
+foreach ($group in $groupsToClone) {
+    if ($dstSet.Contains($group.DistinguishedName)) {
+        $skipped += $group.Name
+        continue
+    }
+
+    try {
+        Add-ADGroupMember -Identity $group.DistinguishedName -Members $dstUser.DistinguishedName -ErrorAction Stop
+        $added += $group.Name
+        [void]$dstSet.Add($group.DistinguishedName)
+    }
+    catch {
+        $failed += "$($group.Name) :: $($_.Exception.Message)"
+    }
+}
+
+# ---- Summary (no elseif/else blocks, avoids paste errors) ----
+Write-Host "=== Group Clone Summary ==="
+Write-Host "Added   : $($added.Count)"
+Write-Host "Skipped : $($skipped.Count)"
+Write-Host "Failed  : $($failed.Count)"
+
+if ($added) {
+    Write-Host ""
+    Write-Host "Added groups:"
+    $added | Sort-Object | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($skipped) {
+    Write-Host ""
+    Write-Host "Already had (skipped):"
+    $skipped | Sort-Object | ForEach-Object { Write-Host "  $_" }
+}
+
+if ($failed) {
+    Write-Host ""
+    Write-Host "Failed:"
+    $failed | ForEach-Object { Write-Host "  $_" }
+}
+
+Write-Host ""
+if (-not $failed -and $added) {
+    Write-Host "Done. Group memberships cloned successfully."
+}
+
+if (-not $failed -and -not $added -and $skipped) {
+    Write-Host "Nothing to add. Target already has all the source groups."
+}
+
+if ($failed) {
+    Write-Host "Completed with some errors."
+}

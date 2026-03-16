@@ -1679,12 +1679,26 @@ try {{
             sections = sections + ["Permissions"]
 
         resolved_mirror_user = mirror_user.strip() or detect_mirror_user(data)
-        group_clone_script = ""
+        group_clone_script_ihi = ""
+        group_clone_script_ihg = ""
         if resolved_mirror_user:
-            group_clone_script = generate_group_clone_script(resolved_mirror_user, username, domain_code)
+            group_clone_script_ihi = generate_group_clone_script(resolved_mirror_user, username, "IHI")
+            group_clone_script_ihg = generate_group_clone_script(resolved_mirror_user, username, "IHG")
 
-        provisioning_parts = [p for p in [ad_create_script, ad_update_script, group_clone_script] if p]
-        provisioning_script = "\n\n# ---- Next Step ----\n\n".join(provisioning_parts)
+        # Build provisioning scripts based on company
+        if domain_code == "IHI":
+            # IHI Script 1: Create AD user (IHI) + Clone groups (IHI)
+            ihi_parts = [p for p in [ad_create_script, group_clone_script_ihi] if p]
+            ihi_provisioning_script = "\n\n# ---- Next Step ----\n\n".join(ihi_parts) if ihi_parts else ""
+
+            # IHI Script 2: Update AD attributes (IHG) + Clone groups (IHG)
+            ihg_parts = [p for p in [ad_update_script, group_clone_script_ihg] if p]
+            ihg_provisioning_script = "\n\n# ---- Next Step ----\n\n".join(ihg_parts) if ihg_parts else ""
+        else:
+            # IHG only: Update AD attributes (IHG) + Clone groups (IHG)
+            ihi_provisioning_script = ""
+            ihg_parts = [p for p in [ad_update_script, group_clone_script_ihg] if p]
+            ihg_provisioning_script = "\n\n# ---- Next Step ----\n\n".join(ihg_parts) if ihg_parts else ""
 
         # Generate messages
         manager_first_name = manager_name.split()[0] if manager_name else "Manager"
@@ -1757,11 +1771,12 @@ Thanks!"""
             "Permissions": ", ".join(permissions) if permissions else "None",
             "AD Create Script": ad_create_script,
             "AD Update Script": ad_update_script,
-            "AD Provisioning Script": provisioning_script,
+            "IHI Provisioning Script": ihi_provisioning_script,
+            "IHG Provisioning Script": ihg_provisioning_script,
             "Message to Manager": message_to_manager,
             "Jira Reply": jira_reply,
-            "Group Clone Script": group_clone_script,
             "Mirror User": resolved_mirror_user,
+            "Domain": domain_code,
             "Sections": sections
         }
     except Exception as e:
@@ -1888,14 +1903,35 @@ Company: {onboarding_details["Company"]}""", language='text')
                             if onboarding_details.get("Mirror User"):
                                 st.info(f"ℹ️ Mirror user detected: {onboarding_details['Mirror User']}")
 
-                            if onboarding_details["AD Provisioning Script"]:
-                                st.markdown("**AD Provisioning Script (Create/Update + Group Clone):**")
-                                st.code(onboarding_details["AD Provisioning Script"], language='powershell')
-                                create_download_button(
-                                    onboarding_details["AD Provisioning Script"],
-                                    f"Provision-AD-User-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
-                                    "Download Provisioning Script"
-                                )
+                            if onboarding_details.get("Domain") == "IHI":
+                                # IHI users get two scripts
+                                if onboarding_details["IHI Provisioning Script"]:
+                                    st.markdown("**IHI Script — Create AD User + Clone Groups (hi.int):**")
+                                    st.code(onboarding_details["IHI Provisioning Script"], language='powershell')
+                                    create_download_button(
+                                        onboarding_details["IHI Provisioning Script"],
+                                        f"IHI-Provision-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                        "Download IHI Script"
+                                    )
+
+                                if onboarding_details["IHG Provisioning Script"]:
+                                    st.markdown("**IHG Script — Update AD Attributes + Clone Groups (ihgd):**")
+                                    st.code(onboarding_details["IHG Provisioning Script"], language='powershell')
+                                    create_download_button(
+                                        onboarding_details["IHG Provisioning Script"],
+                                        f"IHG-Provision-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                        "Download IHG Script"
+                                    )
+                            else:
+                                # IHG users get one script
+                                if onboarding_details["IHG Provisioning Script"]:
+                                    st.markdown("**IHG Script — Update AD Attributes + Clone Groups (ihgd):**")
+                                    st.code(onboarding_details["IHG Provisioning Script"], language='powershell')
+                                    create_download_button(
+                                        onboarding_details["IHG Provisioning Script"],
+                                        f"IHG-Provision-{onboarding_details['Full Name'].replace(' ', '-')}.ps1",
+                                        "Download IHG Script"
+                                    )
                         
                         elif section == "VPN Account":
                             st.markdown("**VPN Account Details:**")
